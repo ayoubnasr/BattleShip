@@ -6,6 +6,9 @@
 
 #include <time.h>
 
+static int CountSunkFlags(Player * player);
+static int HasOpenHits(Player * player);
+
 
 
 /**
@@ -98,31 +101,22 @@ void BotSmartAttack(Player * bot, Player * opponent){
         int col = 0;
 
 
+        int getCoord = -1;
+
         if (bot->riskFactor < HIGH_RISK){
 
             int count = 0;
-            while (opponent->probabilityHeapCategoryLists[bot->currTargetCategory].size == 0)
+            while (opponent->probabilityHeapCategoryLists[bot->currTargetCategory].size == 0 && count < PROB_CATEGORYCOUNT)
             {
-                if (count >= PROB_CATEGORYCOUNT){
-                    //Something is definetely going wrong, all lists appear empty!
-                    perror("Something is wrong! All probability categories are empty.");
-                    exit(EXIT_FAILURE);
-                }
-
                 bot->currTargetCategory += 1;
                 bot->currTargetCategory %= PROB_CATEGORYCOUNT;
                 count++;
             }
-            
-            
-            pickCoords:
-            //Get a randome cell from the opponent's category list of index bot->currTargetCategory:
-            int getCoord = GetRandomProbCoordinateFromCategory(&row, &col, &opponent->probabilityHeapCategoryLists[bot->currTargetCategory]);
-            //printf("got random coord %d,%d\n", row, col);
-            //printf("getCoord: %d\n", getCoord);
 
-            if (opponent->grid[row][col] == HIT || (opponent->grid[row][col] == MISS)){
-                goto pickCoords;
+            if (count < PROB_CATEGORYCOUNT){
+                //Get a randome cell from the opponent's category list of index bot->currTargetCategory:
+                //(the heaps only hold cells that were not shot yet, so the cell is always a new one)
+                getCoord = GetRandomProbCoordinateFromCategory(&row, &col, &opponent->probabilityHeapCategoryLists[bot->currTargetCategory]);
             }
 
             bot->currTargetCategory += 1;
@@ -131,11 +125,17 @@ void BotSmartAttack(Player * bot, Player * opponent){
         }
         else {
             if (bot->riskFactor == EXTREMELYHIGH_RISK){
-                GetHighestProbability(&row, &col, opponent);
+                getCoord = GetHighestProbability(&row, &col, opponent);
             }
             else {
-                GetRandomHighestProbCell(&row, &col, opponent);
+                getCoord = GetRandomHighestProbCell(&row, &col, opponent);
             }
+        }
+
+        if (getCoord < 0 || opponent->grid[row][col] == HIT || opponent->grid[row][col] == MISS){
+            //All categories are empty: the formulas give no cell a chance anymore (it can happen late in the game when misses pile up
+            //around the last ships). Fall back to any cell that was not shot yet.
+            PickRandomCell(&row, &col, opponent, false);
         }
 
 
@@ -143,16 +143,7 @@ void BotSmartAttack(Player * bot, Player * opponent){
         #pragma region [Firing]
         //For now, we'll stick to the Fire() function:
 
-        //Transform the indexes to coordinates: because attack methods take in user coords
-
-        char * error = NULL;
-
-
-        int fire = BotFireHelper(row, col, bot, opponent);
-
-
-        if (error != NULL) free(error);
-
+        BotFireHelper(row, col, bot, opponent);
 
         #pragma endregion
 
@@ -202,6 +193,11 @@ void BotSmartAttack(Player * bot, Player * opponent){
  */
 int GetRandomProbCoordinateFromCategory(int * row, int * col, D_LinkedList * heapCategory){
 
+    if (heapCategory == NULL){
+        Println_Centered("Cannot pick probability from binomial heap. Heap is NULL.", strlen("Cannot pick probability from binomial heap. Heap is NULL."), RED);
+        return -1;
+    }
+
     if (heapCategory->size <= 0){
         Println_Centered("Invalid array size for heapCategory!", strlen("Invalid array size for heapCategory!"), RED);
         return -1;
@@ -211,12 +207,8 @@ int GetRandomProbCoordinateFromCategory(int * row, int * col, D_LinkedList * hea
         Println_Centered("Cannot return coordinate from category when row or column addresses are NULL.", strlen("Cannot return coordinate from category when row or column addresses are NULL."), RED);
         return -1;
     }
-    if (heapCategory == NULL){
-        Println_Centered("Cannot pick probability from binomial heap. Heap is NULL.", strlen("Cannot pick probability from binomial heap. Heap is NULL."), RED);
-        return -1;
-    }
 
-    srand(time(0));
+    //(no srand() here: reseeding with the time on every call returned the same "random" index for a whole second)
     int randIndex = rand() % heapCategory->size;
 
     D_ListNode * curr = get_first(heapCategory);
@@ -228,6 +220,8 @@ int GetRandomProbCoordinateFromCategory(int * row, int * col, D_LinkedList * hea
     
 
     int * elem = BinHeap_FindHighestProbabilityCell((BinomialHeap*)(curr->data));
+
+    if (elem == NULL) return -1; //Empty heaps are kept out of the category lists, so this should not happen
 
     //printf("max prob in heap: %d\n", ((int*)elem)[0]);
     //printf("hmm: %d\n", *(int*)(heapCategory[randIndex]->head->rightSibling->value));
@@ -248,21 +242,18 @@ int GetRandomProbCoordinateFromCategory(int * row, int * col, D_LinkedList * hea
 int GetRandomHighestProbCell(int * row, int* col, Player * player){
 
     //First we check if the high-probability category contains anything:
-    if (player->probabilityHeapCategoryLists[2].size > 0){
-        GetRandomProbCoordinateFromCategory(row, col, &player->probabilityHeapCategoryLists[2]);
+    if (player->probabilityHeapCategoryLists[HIGHPROB_CATEGORY].size > 0){
+        return GetRandomProbCoordinateFromCategory(row, col, &player->probabilityHeapCategoryLists[HIGHPROB_CATEGORY]);
     }
-    else if (player->probabilityHeapCategoryLists[1].size > 0){
-        GetRandomProbCoordinateFromCategory(row, col, &player->probabilityHeapCategoryLists[1]);
+    else if (player->probabilityHeapCategoryLists[AVGPROB_CATEGORY].size > 0){
+        return GetRandomProbCoordinateFromCategory(row, col, &player->probabilityHeapCategoryLists[AVGPROB_CATEGORY]);
     }
-    else if (player->probabilityHeapCategoryLists[0].size > 0){
-        GetRandomProbCoordinateFromCategory(row, col, &player->probabilityHeapCategoryLists[0]);
-    }
-    else {
-        printf("Something must have gone wrong. All grid cells have 0 probability.\n");
-        return -1;
+    else if (player->probabilityHeapCategoryLists[LOWPROB_CATEGORY].size > 0){
+        return GetRandomProbCoordinateFromCategory(row, col, &player->probabilityHeapCategoryLists[LOWPROB_CATEGORY]);
     }
 
-    return 1;
+    //All grid cells have 0 probability: the caller falls back to another way of picking a cell.
+    return -1;
 }
 
 
@@ -293,14 +284,18 @@ int GetHighestProbCoordinateFromCategory(int * row, int * col, D_LinkedList * he
     D_ListNode * curr = get_first(heapCategory);
     D_ListNode * maxProbNode = curr;
 
+    int maxProb = -1;
+
     while (curr != NULL)
     {
         int currProb = BinHeap_FindHighestProbabilityCell((BinomialHeap*)(curr->data))[0];
-        int maxProb = BinHeap_FindHighestProbabilityCell((BinomialHeap*)(maxProbNode->data))[0];
-        
+
         if (currProb > maxProb){
             maxProbNode = curr;
+            maxProb = currProb;
         }
+
+        curr = curr->next;
     }
 
     if (maxProbNode == NULL){
@@ -324,133 +319,72 @@ int GetHighestProbCoordinateFromCategory(int * row, int * col, D_LinkedList * he
 int GetHighestProbability(int * row, int* col, Player * player){
 
     //First we check if the high-probability category contains anything:
-    if (player->probabilityHeapCategoryLists[2].size > 0){
-        GetHighestProbCoordinateFromCategory(row, col, &player->probabilityHeapCategoryLists[2]);
+    if (player->probabilityHeapCategoryLists[HIGHPROB_CATEGORY].size > 0){
+        return GetHighestProbCoordinateFromCategory(row, col, &player->probabilityHeapCategoryLists[HIGHPROB_CATEGORY]);
     }
-    else if (player->probabilityHeapCategoryLists[1].size > 0){
-        GetHighestProbCoordinateFromCategory(row, col, &player->probabilityHeapCategoryLists[1]);
+    else if (player->probabilityHeapCategoryLists[AVGPROB_CATEGORY].size > 0){
+        return GetHighestProbCoordinateFromCategory(row, col, &player->probabilityHeapCategoryLists[AVGPROB_CATEGORY]);
     }
-    else if (player->probabilityHeapCategoryLists[0].size > 0){
-        GetHighestProbCoordinateFromCategory(row, col, &player->probabilityHeapCategoryLists[2]);
-    }
-    else {
-        printf("Something must have gone wrong. All grid cells have 0 probability.\n");
-        return -1;
+    else if (player->probabilityHeapCategoryLists[LOWPROB_CATEGORY].size > 0){
+        return GetHighestProbCoordinateFromCategory(row, col, &player->probabilityHeapCategoryLists[LOWPROB_CATEGORY]);
     }
 
-    return 1;
+    //All grid cells have 0 probability: the caller falls back to another way of picking a cell.
+    return -1;
 }
 
 #pragma endregion
 
 /**
- * This function updates a specified binomial heap by updating each element's probability and re-inserting it into the heap.
+ * This function updates a specified binomial heap: the heap is reassembled from the current probabilities of the cells of its region,
+ * then moved to the right probability category.
+ * 
+ * Only cells that can still be targeted go in the heap: cells that were not shot (neither HIT nor MISS) and whose probability is above 0.
+ * The heap is rebuilt from the grid rather than from its own elements so that a cell whose probability dropped to 0 earlier (and was left
+ * out) comes back once its probability rises again (eg. after a hit next to it).
  * 
  * Input:
  *      - player: the player of which a heap will be updated
  *      - heapIndex: the index of the heap that will be updated. This index should be a valid index within the size of the heap hashmap.
+ * 
+ * Time complexity: O(k log k) for a region of k cells, constant since the region size is constant. Moving the heap to its category is O(1).
  */
 int UpdateHeap(Player * player, int heapIndex){
 
-    //printf("\nINSIDE UPDATEHEAP FUNC:\n");
-
     if (heapIndex >= PROB_REGION_COUNT || heapIndex < 0) return -1;
-
-    //printf("is it null: %d\n", player->probabilityHeapSet[heapIndex] == NULL);
-
-    //First I need to intialize a temporary binomial heap:
-    BinomialHeap temp;
-    temp.head = NULL;
-    temp.compare = player->probabilityHeapSet[heapIndex]->compare;
-    
-    //printf("heree!\n");
 
     BinomialHeap * targetHeap = player->probabilityHeapSet[heapIndex];
 
-
+    //First I empty the heap, freeing its old elements:
     while (targetHeap->head != NULL)
     {
-        int * element = (int*)deleteMin(targetHeap);
-
-        int row = element[1];
-        int col = element[2];
-
-        //Updating the probability to the new one after probGrid got updated:
-        element[0] = player->probabilityGrid[row][col];
-
-        //Now I need to make sure that the probability is not 0 and the coordinate is neither a hit nor a miss:
-        if (element[0] > 0 && player->grid[row][col] != MISS && player->grid[row][col] != HIT){
-            insert(&temp, element);
-        }
+        free(deleteMin(targetHeap));
     }
-    
-    //Connect the head of the temporary heap to the initial, now empty, heap:
-    targetHeap->head = temp.head;
 
-    //NOT ENOUGH TIME TO THINK OF AND IMPLEMENT A BETTER WAY THAN THE ONE BELOW.
+    //Then I re-insert every cell of the region with its new probability. The region's top-left cell is found from its index the same
+    //way HashRegion() numbers the regions: row by row from left to right.
+    int row0 = (heapIndex / PROB_REGIONS_PER_ROW) * PROB_REGION_HEIGHT;
+    int col0 = (heapIndex % PROB_REGIONS_PER_ROW) * PROB_REGION_WIDTH;
 
-    //Finally, I must move this heap to the right category:
-    //I'll traverse all the categories till I find this heap:
-    D_ListNode * curr = NULL; 
-    int CategoryNumber = 0;
-    while (CategoryNumber < PROB_CATEGORYCOUNT)
+    for (int row = row0; row < row0 + PROB_REGION_HEIGHT && row < GRIDSIZE; row++)
     {
-        curr = get_first(&player->probabilityHeapCategoryLists[CategoryNumber]);
-        while (curr != NULL)
+        for (int col = col0; col < col0 + PROB_REGION_WIDTH && col < GRIDSIZE; col++)
         {
-            BinomialHeap * currHeap = (BinomialHeap*)(curr->data);
-
-            int row = ((int*)(currHeap->head->value))[1];
-            int col = ((int*)(currHeap->head->value))[2];
-
-            if (HashRegion(row, col) == heapIndex){//We don't compare the nodes because they are not the same
-                int currHeapProb = BinHeap_FindHighestProbabilityCell(targetHeap)[0];
-                if ((currHeapProb >= HIGHPROB_BASE && CategoryNumber == 2) || (currHeapProb >= AVGPROB_BASE && CategoryNumber == 1)
-                 || (currHeapProb >= LOWPROB_BASE && CategoryNumber == 0)){
-                    return 1; //This means that the heap is at the right location.
-                 }
-
-                goto endLoop;
+            //Now I need to make sure that the probability is not 0 and the coordinate is neither a hit nor a miss:
+            if (player->probabilityGrid[row][col] > 0 && player->grid[row][col] != MISS && player->grid[row][col] != HIT){
+                BinHeap_Insert_ProbElement(targetHeap, player->probabilityGrid[row][col], row, col);
             }
-
-            curr = curr->next;
         }
-        CategoryNumber++;
-    }
-    endLoop:
-
-    if (curr == NULL || CategoryNumber >= PROB_CATEGORYCOUNT){
-        printf("Something is wrong, cannot find heap in any category!");
-        return -1;
     }
 
-    disconnectNode(&player->probabilityHeapCategoryLists[CategoryNumber], curr);
-
-    int highestProb = BinHeap_FindHighestProbabilityCell(targetHeap)[0];
-
-        //InOrderTraversal_ProbNode_Print(&binHeap);
-    //printf("highestProb: %d\n", highestProb);
-
-    if (highestProb >= HIGHPROB_BASE){
-
-        //Place in list of index 2 for high probabilities:
-        addLast(&player->probabilityHeapCategoryLists[2], targetHeap);
-    }
-    else if (highestProb >= AVGPROB_BASE){
-        //Place in array of index 1 for avg probabilities:
-        addLast(&player->probabilityHeapCategoryLists[1], targetHeap);
-    }
-    else {
-        //Place in array of index 0 for low probabilities:
-        addLast(&player->probabilityHeapCategoryLists[0], targetHeap);
-    }
-
-    return 1;
+    //Finally, I must move this heap to the right category. The region's list node is stored with the region, so this is O(1):
+    return PlaceHeapInCategory(player, heapIndex);
 }
 
 
 /**
  * This function will scan an area on the graph and update, once only, the binomial heap tied to each probability region.
+ * The area is given by its inclusive bounds and is clipped to the grid.
  */
 int UpdateHeapsWithinBounds(Player * player, int row0, int row1, int col0, int col1){
 
@@ -459,29 +393,25 @@ int UpdateHeapsWithinBounds(Player * player, int row0, int row1, int col0, int c
     //Or, better way: I could save the hash indices of the regions updated and check if the array contains the one I'm trying to update
 
     //Even better way: I could set up a coordinate point that jumps between regions. I can access the region size from the PROB_REGION_SIZE macro.
-    //First I initialize the coordinate point to be the top right of the target area. Then I add to the index (region width + 1) 
-    //in the horizontal direction and update until it goes out of bounds of the target area.
-    //I do the same vertically.
+    //Jumping a whole region at a time means every region that intersects the area is visited exactly once: I go from the region that
+    //holds the top-left corner of the area to the region that holds its bottom-right corner, row of regions by row of regions.
 
-    int curr[2] = {row0, col0};
+    row0 = MAX(0, row0);
+    col0 = MAX(0, col0);
+    row1 = MIN(GRIDSIZE - 1, row1);
+    col1 = MIN(GRIDSIZE - 1, col1);
 
-    int regionSize[2] = PROB_REGION_SIZE;
+    if (row0 > row1 || col0 > col1) return 0;
 
-    
-    while (IndexWithinRange(curr[0])){
-
-        while (IndexWithinRange(curr[0]) && IndexWithinRange(curr[1])){
-            
-            UpdateHeap(player, HashRegion(curr[0], curr[1]));
-
-            curr[1] += regionSize[1] + 1;
+    for (int regionRow = row0 / PROB_REGION_HEIGHT; regionRow <= row1 / PROB_REGION_HEIGHT; regionRow++)
+    {
+        for (int regionCol = col0 / PROB_REGION_WIDTH; regionCol <= col1 / PROB_REGION_WIDTH; regionCol++)
+        {
+            UpdateHeap(player, regionRow * PROB_REGIONS_PER_ROW + regionCol);
         }
-        curr[1] = col0;
-        curr[0] += regionSize[0] + 1;
-
     }
-        
 
+    return 1;
 }
 
 
@@ -670,19 +600,46 @@ int BotFireHelper(int row, int col, Player * bot, Player * opponent){
         return fireRes;
     }
 
+    BotAnalyzeShot(row, col, bot, opponent);
 
-    int target[2] = {row,col};
+    return fireRes;
 
+}
 
-    //Updating the probability distribution:
-    UpdateSurroundingProbabilities(opponent, target);
+/**
+ * This is the "analyze results and changes, then assign operations for next turn" part of the bot's brain. It runs after every cell the
+ * bot shoots at (row, col), whatever the weapon:
+ *      - If the shot sank a ship, the entire probability grid and every region heap are recalculated. (presentation, 2.1.2)
+ *        When no damaged ship is left after that, the tasks left on the stack (cells around the sunk ship) are dropped.
+ *      - Otherwise the probabilities around the cell, and the heaps of the regions around it, are updated.
+ *      - If the shot was a HIT on a ship that is still afloat, tasks are assigned to target the surrounding cells.
+ */
+void BotAnalyzeShot(int row, int col, Player * bot, Player * opponent){
 
-    //Update the probability heaps for all the probability regions that surround the target.
-    UpdateHeapsWithinBounds(opponent, MAX(0, row - LONGEST_SHIPLENGTH), MIN(GRIDSIZE - 1, row + LONGEST_SHIPLENGTH),
-     MAX(0, col - LONGEST_SHIPLENGTH), MIN(GRIDSIZE - 1, col + LONGEST_SHIPLENGTH));
+    int sunkBefore = CountSunkFlags(opponent);
+    int sunkAfter = countSunkShips(opponent); //Also updates the IsSunk flags the probability formulas rely on
+
+    if (sunkAfter > sunkBefore){
+
+        RecalculateAllProbabilities(opponent);
+
+        if (!HasOpenHits(opponent)){
+            ClearStackMemory(bot);
+        }
+    }
+    else {
+        int target[2] = {row,col};
+
+        //Updating the probability distribution:
+        UpdateSurroundingProbabilities(opponent, target);
+
+        //Update the probability heaps for all the probability regions that surround the target.
+        UpdateHeapsWithinBounds(opponent, row - LONGEST_SHIPLENGTH, row + LONGEST_SHIPLENGTH,
+         col - LONGEST_SHIPLENGTH, col + LONGEST_SHIPLENGTH);
+    }
 
     //Need to check if the target was a HIT or a MISS. If it's a HIT then we assign new tasks to target the surrounding cells:
-    if(opponent->grid[row][col] == HIT){
+    if(opponent->grid[row][col] == HIT && !IsCellOfSunkShip(opponent, row, col)){
 
         int neighbours[4][2] = {{row + 1, col}, {row - 1, col}, {row, col + 1}, {row, col - 1}};
 
@@ -697,12 +654,138 @@ int BotFireHelper(int row, int col, Player * bot, Player * opponent){
         }
     }
 
-    return fireRes;
+}
 
+/**
+ * Recalculates the probability of every cell of the grid and rebuilds every region heap. Used when a ship sinks: the ship no longer counts
+ * in the formulas, which changes the probabilities everywhere.
+ */
+int RecalculateAllProbabilities(Player * player){
+
+    int wholeGrid[4] = {0, GRIDSIZE - 1, 0, GRIDSIZE - 1};
+
+    UpdateRegionProbabilities(player, wholeGrid);
+
+    return UpdateHeapsWithinBounds(player, 0, GRIDSIZE - 1, 0, GRIDSIZE - 1);
+}
+
+//Number of the player's ships that are flagged as sunk (without re-checking the grid, unlike countSunkShips())
+static int CountSunkFlags(Player * player){
+    return player->carrierBounds.IsSunk + player->battleshipBounds.IsSunk + player->destroyerBounds.IsSunk + player->submarineBounds.IsSunk;
+}
+
+//Returns 1 if the player's grid has a HIT on a ship that is not sunk yet (a damaged ship the bot should finish)
+static int HasOpenHits(Player * player){
+
+    for (int i = 0; i < GRIDSIZE; i++)
+    {
+        for (int j = 0; j < GRIDSIZE; j++)
+        {
+            if (player->grid[i][j] == HIT && !IsCellOfSunkShip(player, i, j)) return 1;
+        }
+    }
+
+    return 0;
+}
+
+//Drops (and frees) every task on the bot's stack memory
+void ClearStackMemory(Player * bot){
+
+    if (bot->stackMemory == NULL) return;
+
+    while (!is_empty(bot->stackMemory))
+    {
+        freeTask((BotTask*)removeFirst(bot->stackMemory));
+    }
 }
 
 #pragma endregion
 
+
+
+#pragma region [Random Targeting]
+
+/**
+ * Returns 1 if at least one of the opponent's ships that are still afloat could lie on the cell (row, col), and 0 otherwise.
+ * A ship could lie on the cell if, horizontally or vertically, it fits in a line through the cell with no MISS and no sunk ship in the way.
+ */
+int CanCellHoldShip(Player * opponent, int row, int col){
+
+    if (opponent->grid[row][col] == MISS || IsCellOfSunkShip(opponent, row, col)) return 0;
+
+    ShipBounds ships[] = {opponent->carrierBounds, opponent->battleshipBounds, opponent->destroyerBounds, opponent->submarineBounds};
+
+    for (int s = 0; s < SHIPCOUNT; s++)
+    {
+        if (ships[s].IsSunk) continue;
+
+        int shipLength = MAX(ships[s].endRow - ships[s].startRow, ships[s].endCol - ships[s].startCol) + 1;
+
+        //Every horizontal (o = 0) and vertical (o = 1) placement of the ship that covers the cell:
+        for (int o = 0; o < 2; o++)
+        {
+            for (int start = -(shipLength - 1); start <= 0; start++)
+            {
+                int fits = 1;
+
+                for (int k = start; k < start + shipLength && fits; k++)
+                {
+                    int r = (o == 0) ? row : row + k;
+                    int c = (o == 0) ? col + k : col;
+
+                    if (!IndexWithinRange(r) || !IndexWithinRange(c) || opponent->grid[r][c] == MISS || IsCellOfSunkShip(opponent, r, c)){
+                        fits = 0;
+                    }
+                }
+
+                if (fits) return 1;
+            }
+        }
+    }
+
+    return 0;
+}
+
+/**
+ * Picks a random cell of the opponent's grid that was not shot yet (neither HIT nor MISS), every such cell being equally likely.
+ * When onlyCellsThatCanHoldShips is true, cells where no remaining ship fits are skipped too (see CanCellHoldShip()).
+ * 
+ * Returns 1 and stores the cell in row and col, or -1 if there is no such cell.
+ */
+int PickRandomCell(int * row, int * col, Player * opponent, int onlyCellsThatCanHoldShips){
+
+    int candidates = 0;
+
+    //First pass: count the candidate cells. Second pass: walk to a random one of them.
+    for (int pass = 0; pass < 2; pass++)
+    {
+        int pick = (pass == 1) ? rand() % candidates : -1;
+        int seen = 0;
+
+        for (int i = 0; i < GRIDSIZE; i++)
+        {
+            for (int j = 0; j < GRIDSIZE; j++)
+            {
+                if (opponent->grid[i][j] == HIT || opponent->grid[i][j] == MISS) continue;
+                if (onlyCellsThatCanHoldShips && !CanCellHoldShip(opponent, i, j)) continue;
+
+                if (pass == 1 && seen == pick){
+                    *row = i;
+                    *col = j;
+                    return 1;
+                }
+                seen++;
+            }
+        }
+
+        candidates = seen;
+        if (candidates == 0) return -1;
+    }
+
+    return -1;
+}
+
+#pragma endregion
 
 
 //Later on, ship placement will depend on recorded data on previous players.

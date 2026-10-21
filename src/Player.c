@@ -79,8 +79,7 @@ Player* alloc_InitializePlayer(Player** output, char* playerName, int isBot, Bot
 
 
 
-    //initialize player color
-    srand(time(0));
+    //initialize player color (the random generator is seeded once in main())
     (*output)->UIColor = PlayerColors[rand() % playerColorCount]; //Need a better way so that no two players have same color.
     
 
@@ -91,16 +90,11 @@ Player* alloc_InitializePlayer(Player** output, char* playerName, int isBot, Bot
     //Initialize the probability distribution grid:
     InitializeProbabilities(*output);
 
-    DisplayIntGrid((*output)->probabilityGrid, GRIDSIZE);
-
     InitializeProbabilityHeaps(*output);
     //printf("adsff\n");
 
-    if (isBot == 1){
-
-        //If Bot: Initialize Bot Stack Memory:
-        InitializeBotStackMemory(*output);
-    }
+    //If Bot: Initialize Bot Stack Memory (players get a NULL stack):
+    InitializeBotStackMemory(*output);
 
     (*output)->currTargetCategory = PROB_CATEGORYCOUNT - 1;
 
@@ -231,12 +225,60 @@ int HashRegion(int i, int j){
     double dj = (double)j;
     double GRDSZ = (double)GRIDSIZE;
 
-    double rows = floor(di / regionSize[0]);
-    double cols = ceil(GRIDSIZE / regionSize[1]);
-    double colIdx = floor(dj / regionSize[1]);
+    //regionSize is {width, height}: rows are counted in region heights and columns in region widths
+    double rows = floor(di / regionSize[1]);
+    double cols = ceil(GRDSZ / regionSize[0]);
+    double colIdx = floor(dj / regionSize[0]);
 
     int regionIndex = (int)(rows * cols + colIdx);
     return regionIndex;
+}
+
+/**
+ * Returns the category (index of the category list) that a region belongs to according to its highest probability.
+ * Returns NO_CATEGORY when the probability is below LOWPROB_BASE (no ship can be there).
+ */
+int GetProbabilityCategory(int probability){
+
+    if (probability >= HIGHPROB_BASE) return HIGHPROB_CATEGORY;
+    if (probability >= AVGPROB_BASE) return AVGPROB_CATEGORY;
+    if (probability >= LOWPROB_BASE) return LOWPROB_CATEGORY;
+
+    return NO_CATEGORY;
+}
+
+/**
+ * This function makes sure that the heap of the region heapIndex is in the category list that matches its highest probability.
+ *
+ * The region's list node is stored in player->probabilityHeapNodes, so the heap is unlinked from its old list and appended to the new one
+ * in O(1), no searching through the lists. An empty heap (no cell left to target in that region) is removed from the lists altogether.
+ */
+int PlaceHeapInCategory(Player * player, int heapIndex){
+
+    if (heapIndex < 0 || heapIndex >= PROB_REGION_COUNT) return -1;
+
+    BinomialHeap * heap = player->probabilityHeapSet[heapIndex];
+
+    int * highestCell = BinHeap_FindHighestProbabilityCell(heap);
+
+    int newCategory = (highestCell == NULL) ? NO_CATEGORY : GetProbabilityCategory(highestCell[0]);
+    int oldCategory = player->probabilityHeapCategory[heapIndex];
+
+    if (newCategory == oldCategory) return 1; //This means that the heap is at the right location.
+
+    if (oldCategory != NO_CATEGORY){
+        removeNode(&player->probabilityHeapCategoryLists[oldCategory], player->probabilityHeapNodes[heapIndex]);
+        player->probabilityHeapNodes[heapIndex] = NULL;
+    }
+
+    if (newCategory != NO_CATEGORY){
+        addLast(&player->probabilityHeapCategoryLists[newCategory], heap);
+        player->probabilityHeapNodes[heapIndex] = player->probabilityHeapCategoryLists[newCategory].tail;
+    }
+
+    player->probabilityHeapCategory[heapIndex] = newCategory;
+
+    return 1;
 }
 
 
@@ -271,7 +313,16 @@ int InitializeProbabilityHeaps(Player * player){
     {
         initialize_empty_DList(&player->probabilityHeapCategoryLists[i]);
     }
-    
+
+    //No region is in a category list yet:
+    player->probabilityHeapNodes = (D_ListNode**)(malloc(sizeof(D_ListNode*) * PROB_REGION_COUNT));
+    player->probabilityHeapCategory = (int*)(malloc(sizeof(int) * PROB_REGION_COUNT));
+    for (int i = 0; i < PROB_REGION_COUNT; i++)
+    {
+        player->probabilityHeapNodes[i] = NULL;
+        player->probabilityHeapCategory[i] = NO_CATEGORY;
+    }
+
 
 
     //We will pass over every cell on the grid and insert it into the right Binomial Heap in the heap hashset using the HashRegion() function.
@@ -290,33 +341,11 @@ int InitializeProbabilityHeaps(Player * player){
         
     }
 
-    DisplayIntGrid(player->probabilityGrid, GRIDSIZE);
-    
     //Now here, we go over the hashset and we categorize the heaps into the three category arrays:
 
     for (int i = 0; i < PROB_REGION_COUNT; i++)
     {
-        BinomialHeap * targetHeap = player->probabilityHeapSet[i];
-
-        int highestProb = BinHeap_FindHighestProbabilityCell(targetHeap)[0];
-
-        //InOrderTraversal_ProbNode_Print(&binHeap);
-        //printf("highestProb: %d\n", highestProb);
-
-        if (highestProb >= HIGHPROB_BASE){
-
-            //Place in list of index 2 for high probabilities:
-            addLast(&player->probabilityHeapCategoryLists[2], targetHeap);
-        }
-        else if (highestProb >= AVGPROB_BASE){
-            //Place in array of index 1 for avg probabilities:
-            addLast(&player->probabilityHeapCategoryLists[1], targetHeap);
-        }
-        else {
-            //Place in array of index 0 for low probabilities:
-            addLast(&player->probabilityHeapCategoryLists[0], targetHeap);
-        }
-        
+        PlaceHeapInCategory(player, i);
     }
     
 
@@ -578,6 +607,25 @@ int checkIfSunk(Player *player, ShipBounds *shipBounds) {
     }
     shipBounds->IsSunk=1;
     return 1;
+}
+
+/**
+ * Returns 1 if the cell (row, col) belongs to one of the player's ships that is already sunk, 0 otherwise.
+ * Uses the IsSunk flags as last updated by countSunkShips()/checkIfSunk().
+ */
+int IsCellOfSunkShip(Player * player, int row, int col){
+
+    ShipBounds * ships[] = {&player->carrierBounds, &player->battleshipBounds, &player->destroyerBounds, &player->submarineBounds};
+
+    for (int s = 0; s < SHIPCOUNT; s++)
+    {
+        if (ships[s]->IsSunk && row >= ships[s]->startRow && row <= ships[s]->endRow
+            && col >= ships[s]->startCol && col <= ships[s]->endCol){
+            return 1;
+        }
+    }
+
+    return 0;
 }
 
 

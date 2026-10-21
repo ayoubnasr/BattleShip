@@ -63,3 +63,57 @@ void test_bot_task_creation(void){
     CHECK_EQ_INT(PerformTask(empty), 0); //a task with no function does nothing
     freeTask(empty);
 }
+
+void CheckRegionSystem(Player *p); //test_probabilities.c
+
+static int CountShots(Player *p){
+    int shots = 0;
+    for (int i = 0; i < GRIDSIZE; i++)
+        for (int j = 0; j < GRIDSIZE; j++)
+            if (p->grid[i][j] == HIT || p->grid[i][j] == MISS) shots++;
+    return shots;
+}
+
+/**
+ * Lets the bot attack the target until every ship is sunk. Every turn must shoot exactly one new cell (never the same one twice) and
+ * the region system must stay consistent. Returns the number of turns it took.
+ */
+static int PlayUntilSunk(Player *bot, Player *target, void (*attack)(Player *, Player *), int checkRegions){
+    int turns = 0;
+    while (countSunkShips(target) < SHIPCOUNT && turns < GRIDSIZE * GRIDSIZE){
+        int before = CountShots(target);
+        attack(bot, target);
+        turns++;
+        CHECK_EQ_INT(CountShots(target), before + 1);
+        if (checkRegions) CheckRegionSystem(target);
+    }
+    CHECK_EQ_INT(countSunkShips(target), SHIPCOUNT);
+    return turns;
+}
+
+void test_smart_bot_wins_at_every_risk_level(void){
+    int risks[] = {LOW_RISK, NORMAL_RISK, HIGH_RISK, EXTREMELYHIGH_RISK};
+
+    for (int r = 0; r < 4; r++){
+        for (int game = 0; game < 5; game++){
+            Player *bot = NewTestPlayer("bot", true, SMART);
+            Player *target = NewTestPlayerWithFleet("target");
+            bot->riskFactor = risks[r];
+
+            int turns = PlayUntilSunk(bot, target, BotSmartAttack, game == 0);
+            CHECK(turns <= GRIDSIZE * GRIDSIZE);
+        }
+    }
+}
+
+void test_smart_bot_fleet_in_corner(void){
+    //Ships packed along the edges (lowest starting probability) still get found
+    Player *bot = NewTestPlayer("bot", true, SMART);
+    Player *target = NewTestPlayer("target", false, DUMB);
+    PlaceShip(target, CARRIER_C, "J1", "v");
+    PlaceShip(target, BATTLESHIP_C, "A10", "h");
+    PlaceShip(target, DESTROYER_C, "A1", "v");
+    PlaceShip(target, SUBMARINE_C, "I10", "h");
+
+    PlayUntilSunk(bot, target, BotSmartAttack, 1);
+}

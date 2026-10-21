@@ -67,6 +67,14 @@ int BotFire(void** args);
 
 int BotFireHelper(int row, int col, Player * bot, Player * opponent);
 
-void PlaceBotShips(Player * bot);
+void BotAnalyzeShot(int row, int col, Player * bot, Player * opponent);
+
+int RecalculateAllProbabilities(Player * player);
+
+void ClearStackMemory(Player * bot);
+
+int CanCellHoldShip(Player * opponent, int row, int col);
+
+int PickRandomCell(int * row, int * col, Player * opponent, int onlyCellsThatCanHoldShips);
 
 #endif

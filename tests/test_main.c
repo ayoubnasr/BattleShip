@@ -44,6 +44,18 @@ void test_count_sunk_ships(void);
 //test_bot.c
 void test_bot_task_stack_order(void);
 void test_bot_task_creation(void);
+void test_smart_bot_wins_at_every_risk_level(void);
+void test_smart_bot_fleet_in_corner(void);
+
+//test_probabilities.c
+void test_initial_probability_grid(void);
+void test_initial_region_system(void);
+void test_hash_region(void);
+void test_probability_categories(void);
+void test_miss_lowers_and_hit_raises_neighbours(void);
+void test_sinking_recalculates_and_clears_tasks(void);
+void test_sinking_keeps_tasks_for_other_damaged_ship(void);
+void test_cell_can_hold_ship(void);
 
 int main(void){
     srand((unsigned)time(NULL));
@@ -80,9 +92,21 @@ int main(void){
     RUN_TEST(test_torpedo);
     RUN_TEST(test_count_sunk_ships);
 
+    printf("\n-- Probability grid and regions --\n");
+    RUN_TEST(test_initial_probability_grid);
+    RUN_TEST(test_initial_region_system);
+    RUN_TEST(test_hash_region);
+    RUN_TEST(test_probability_categories);
+    RUN_TEST(test_miss_lowers_and_hit_raises_neighbours);
+    RUN_TEST(test_sinking_recalculates_and_clears_tasks);
+    RUN_TEST(test_sinking_keeps_tasks_for_other_damaged_ship);
+    RUN_TEST(test_cell_can_hold_ship);
+
     printf("\n-- Bot --\n");
     RUN_TEST(test_bot_task_stack_order);
     RUN_TEST(test_bot_task_creation);
+    RUN_TEST(test_smart_bot_wins_at_every_risk_level);
+    RUN_TEST(test_smart_bot_fleet_in_corner);
 
     printf("\n%d tests, %d failed\n", tests_run, tests_failed);
     return tests_failed == 0 ? EXIT_SUCCESS : EXIT_FAILURE;

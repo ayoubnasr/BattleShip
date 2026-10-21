@@ -104,6 +104,12 @@ int InitalizeCutOffProb(Player *player, int target[2]) // player here is the opp
     return 1;
 }
 
+//A HIT on a ship that is not sunk yet ("open" hit): the rest of that ship is still somewhere around it
+static int IsOpenHit(Player *player, int row, int col)
+{
+    return player->grid[row][col] == HIT && !IsCellOfSunkShip(player, row, col);
+}
+
 int CalcOverlapProb(Player *player, int target[2])
 {
     int rowc = target[0];
@@ -134,22 +140,23 @@ int CalcOverlapProb(Player *player, int target[2])
 
         for (int i = 0; i < shipLength; i++)
         {
-            if (rowc - i >= 0 && player->grid[rowc - i][colc] == HIT)
+            // hits on ships that are already sunk tell nothing about where the remaining ships are, so they don't count (IsOpenHit)
+            if (rowc - i >= 0 && IsOpenHit(player, rowc - i, colc))
                 adjustment++;
             else if (rowc - i >= 0 && player->grid[rowc - i][colc] == MISS)
                 adjustment--;
 
-            if (colc - i >= 0 && player->grid[rowc][colc - i] == HIT)
+            if (colc - i >= 0 && IsOpenHit(player, rowc, colc - i))
                 adjustment++;
             else if (colc - i >= 0 && player->grid[rowc][colc - i] == MISS)
                 adjustment--;
 
-            if (colc + i < GRIDSIZE && player->grid[rowc][colc + i] == HIT)
+            if (colc + i < GRIDSIZE && IsOpenHit(player, rowc, colc + i))
                 adjustment++;
             else if (colc + i < GRIDSIZE && player->grid[rowc][colc + i] == MISS)
                 adjustment--;
 
-            if (rowc + i < GRIDSIZE && player->grid[rowc + i][colc] == HIT)
+            if (rowc + i < GRIDSIZE && IsOpenHit(player, rowc + i, colc))
                 adjustment++;
             else if (rowc + i < GRIDSIZE && player->grid[rowc + i][colc] == MISS)
                 adjustment--;

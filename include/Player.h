@@ -29,6 +29,12 @@ typedef struct ShipBounds {
  */
 #define PROB_CATEGORYCOUNT 3
 
+//Index of each category in the probabilityHeapCategoryLists array:
+#define LOWPROB_CATEGORY 0
+#define AVGPROB_CATEGORY 1
+#define HIGHPROB_CATEGORY 2
+#define NO_CATEGORY -1 //Regions with no cell left to target (all shot, or zero probability) are not in any list
+
 //THE HIGHEST A PROBABILITY CAN BE IS 2(5 + 4 + 3 + 2) = 28
 #define NULLCHANCEPROB 0
 #define LOWPROB_BASE 1
@@ -39,7 +45,11 @@ typedef struct ShipBounds {
 #define PROB_REGION_HEIGHT 2
 #define PROB_REGION_SIZE {PROB_REGION_WIDTH, PROB_REGION_HEIGHT}
 
-#define PROB_REGION_COUNT ceil(GRIDSIZE / PROB_REGION_WIDTH) * ceil(GRIDSIZE / PROB_REGION_HEIGHT)
+//Number of regions on one row of the grid, and in total. Rounded up: when the grid size is not a multiple of the region size, the last
+//regions of a row/column are smaller.
+#define PROB_REGIONS_PER_ROW ((GRIDSIZE + PROB_REGION_WIDTH - 1) / PROB_REGION_WIDTH)
+#define PROB_REGIONS_PER_COL ((GRIDSIZE + PROB_REGION_HEIGHT - 1) / PROB_REGION_HEIGHT)
+#define PROB_REGION_COUNT (PROB_REGIONS_PER_ROW * PROB_REGIONS_PER_COL)
 
 #define EXTREMELYHIGH_RISK 3
 #define HIGH_RISK 2
@@ -78,20 +88,20 @@ typedef struct Player{
      *      - value: grid coordinate (i,j)
      * 
      * 
-     * The array will be initialized with three slots:
-     *      - index 0: null chance probability regions
-     *      - index 1: low probability regions
-     *      - index 2: avg probability regions
-     *      - index 3: high probability regions
-     * 
+     * The heaps are categorized in three linked lists (probabilityHeapCategoryLists):
+     *      - index 0 (LOWPROB_CATEGORY): low probability regions
+     *      - index 1 (AVGPROB_CATEGORY): avg probability regions
+     *      - index 2 (HIGHPROB_CATEGORY): high probability regions
+     *      Null chance regions (no cell left that could hold a ship) are kept out of the lists.
+     *
      * Throughout the game certain regions will lose or gain probability. When that happens, they will be moved between the three arrays and placed
      * in the corresponding one.
-     * 
+     *
      * How we determine in which array a certain priority queue is placed:
      *      When the probabilities of some region are updated, the entire heap is reassembeled which takes O(k) where k is the size of the largest
      *      ship so O(1). According to the highest probability in the heap we can know whether the region falls in low, average, or high probability range.
      *      According to the range, we decide where to move it.
-     * 
+     *
      * This method solves two main problems:
      *      - Bot predictability
      *      - Accessing the highest probability in O(1)
@@ -99,6 +109,16 @@ typedef struct Player{
     BinomialHeap ** probabilityHeapSet;
     //BinomialHeap *** probabilityHeapArray;
     D_LinkedList * probabilityHeapCategoryLists; //This pointer represents an array of linked lists.
+
+    /**
+     * For every region (same index as probabilityHeapSet), the node of the category list that holds the region's heap, and the index of
+     * that category list (NO_CATEGORY and NULL when the region is in no list).
+     *
+     * This is what makes moving a region to another category O(1): the heap's list node is found directly from the hash of the region,
+     * then unlinked and appended to the new category without searching through the lists. (presentation, 2.2.5: final region system)
+     */
+    D_ListNode ** probabilityHeapNodes;
+    int * probabilityHeapCategory;
 
     int currTargetCategory; //This is used to allow the bot to follow a pattern picking once from every category every time.
 
@@ -119,6 +139,14 @@ int InitializeProbabilities(Player * player);
 int InitializeProbabilityHeaps(Player * player);
 
 int HashRegion(int i, int j);
+
+int GetProbabilityCategory(int probability);
+
+int PlaceHeapInCategory(Player * player, int heapIndex);
+
+int BinHeap_Insert_ProbElement(BinomialHeap * binHeap, int Prob, int row, int col);
+
+int IsCellOfSunkShip(Player * player, int row, int col);
 
 
 int InitializeBotStackMemory(Player * bot);

@@ -43,6 +43,16 @@ int CalcOverlapProb(Player *player, int target[2]);
 int UpdateSurroundingProbabilities(Player *player, int target[2]);
 
 /**
+ * Recalculates the probabilities of every cell in a rectangular area. Cells that were shot (hit or miss) are skipped.
+ * Used on the whole grid when a ship sinks.
+ *
+ * @param player Pointer to the Player structure containing the grid and probability grid.
+ * @param target A 4-element array {row0, row1, col0, col1} of the area's bounds (inclusive).
+ * @return 1 if the function worked properly, 0 otherwise.
+ */
+int UpdateRegionProbabilities(Player *player, int target[4]);
+
+/**
  * Checks if the target square is valid for further attacks.
  * 
  * A square is invalid if it has already been marked as a hit or miss.
