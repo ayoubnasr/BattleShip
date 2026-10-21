@@ -146,9 +146,6 @@ CI runs them on Linux and macOS on every push.
 └── Makefile
 ```
 
-## Authors
+## Author
 
-- Ayoub Nasr
-- Ali Haddam
-- Fadi Bayan
-- Hussein Ghaddaf
+Ayoub Nasr

@@ -635,9 +635,6 @@ void Welcome()
     Println("");
     Println_Centered("Developed by:", strlen("Developed by:"), BRIGHT_CYAN);
     Println_Centered("- Ayoub Nasr", strlen("- Ayoub Nasr"), BRIGHT_CYAN);
-    Println_Centered("- Ali Haddam", strlen("- Ali Haddam"), BRIGHT_CYAN);
-    Println_Centered("- Fadi Bayan", strlen("- Fadi Bayan"), BRIGHT_CYAN);
-    Println_Centered("- Hussein Ghaddaf", strlen("- Ayoub Nasr"), BRIGHT_CYAN);
     Println("");
     Println_Centered("About Battleship:", strlen("About Battleship:"), BRIGHT_CYAN);
     Println_Centered("Battleship is a strategic guessing game where two players try to sink each other's fleet of ships.", strlen("Battleship is a strategic guessing game where two players try to sink each other's fleet of ships."), BRIGHT_CYAN);
