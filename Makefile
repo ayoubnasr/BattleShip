@@ -10,15 +10,11 @@ LDLIBS = -lm
 # Source files
 SRCs = $(SRC)/coordslib.c $(SRC)/defs.c $(SRC)/Driver.c $(SRC)/InputLib.c $(SRC)/ShipPlacement.c $(SRC)/ShortcutFuncs.c $(SRC)/Attacks.c $(SRC)/Player.c $(SRC)/UITools.c $(SRC)/BinomialHeap.c $(SRC)/Bot.c $(SRC)/CalcProbs.c $(SRC)/D_LinkedList.c
 
-# Platform specifics (Windows: MinGW make running in cmd)
+# Executables get the .exe extension on Windows. (bin/ is kept in git with a .gitkeep file, so no mkdir is needed on any shell.)
 ifeq ($(OS),Windows_NT)
     EXE = .exe
-    MKDIR_BIN = if not exist $(BIN) mkdir $(BIN)
-    RM_BIN = if exist $(BIN) rmdir /S /Q $(BIN)
 else
     EXE =
-    MKDIR_BIN = mkdir -p $(BIN)
-    RM_BIN = rm -rf $(BIN)
 endif
 
 # Output executable
@@ -35,19 +31,20 @@ all: $(OUTPUT)
 
 # Compile and link
 $(OUTPUT): $(SRCs) $(wildcard $(INC)/*.h)
-	$(MKDIR_BIN)
 	$(CC) $(CFLAGS) -o $@ $(SRCs) $(LDLIBS)
 
 run: $(OUTPUT)
 	./$(OUTPUT)
 
 $(TEST_OUTPUT): $(TEST_SRCs) $(wildcard $(INC)/*.h) $(wildcard $(TEST_DIR)/*.h)
-	$(MKDIR_BIN)
 	$(CC) $(CFLAGS) -o $@ $(TEST_SRCs) $(LDLIBS)
 
 test: $(TEST_OUTPUT)
 	./$(TEST_OUTPUT)
 
-# Clean up
+# Clean up (MinGW make may run recipes in cmd or in sh: on Windows try both, ignoring the one that doesn't exist)
 clean:
-	$(RM_BIN)
+	-rm -f $(OUTPUT) $(TEST_OUTPUT)
+ifeq ($(OS),Windows_NT)
+	-del /Q $(subst /,\,$(OUTPUT) $(TEST_OUTPUT)) 2>NUL
+endif

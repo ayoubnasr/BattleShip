@@ -1,5 +1,6 @@
-# Build output
-bin/
+# Build output (bin/ itself is kept with a .gitkeep)
+bin/*
+!bin/.gitkeep
 build/
 *.o
 *.obj
