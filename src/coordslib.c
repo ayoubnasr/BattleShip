@@ -2,6 +2,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <ctype.h>
 
 #include <math.h>
 #include "../include/coordslib.h"
@@ -62,11 +63,10 @@ int CoordToIndex(char coords[], int start, int endEXC, char startingChar, char e
 static int GetCoordSplitIndex(char coords[]){
 
     int split = 0;
-    char currCoord = startingCoordinate_1;
 
     for (split = 0; split < strlen(coords); split++){
         char currChar = coords[split];
-        if (currChar < currCoord || currChar > currCoord + GRIDSIZE){
+        if (currChar < startingCoordinate_1 || currChar > endingCoordinate_1){
             return split - 1;
         }
     }
@@ -93,18 +93,18 @@ static int GetCoordSplitIndex(char coords[]){
  *      - end: ending char
  *      - startingCoord: the starting coordinate of the number's numeral system
  * Output:
- *      - True: if the inputted coordinate component is valid (all characters in bound)
- *      - False: otherwise
+ *      - True (1): if the inputted coordinate component is valid (all characters in bound)
+ *      - False (0): otherwise
 */
 int IsCoordValid(char coords[], int start, int end, char startingCoord){
-    
+
     for (int i = start; i < end; i++){
         char currChar = coords[i];
         if (currChar < startingCoord || currChar > startingCoord + GRIDSIZE){
-            return -1;
+            return 0;
         }
     }
-    
+
     return 1;
 }
 
@@ -127,9 +127,16 @@ int IndexWithinRange(int index){
     Then it retrieves an index for each number ('AAA' = 000 and '001' = 001).
     The developer could define any numeral system using any ASCII symbols on the condition that those symbols are in a sequence (eg. 'A' = 65, 'B' = 66...) because the functions this function is dependant on exploit that ordering of the ASCII numbers.
 */
-int * alloc_ArrayCoordsFromUserCoords(char coords[], char ** outputMsg){
-    
-    int coordsLen = strlen(coords);
+int * alloc_ArrayCoordsFromUserCoords(char userCoords[], char ** outputMsg){
+
+    //Work on an uppercase copy so that "b4" is read the same as "B4":
+    char coords[MAXCOORDLENGTH];
+    int coordsLen = 0;
+    while (userCoords[coordsLen] != '\0' && coordsLen < MAXCOORDLENGTH - 1){
+        coords[coordsLen] = toupper((unsigned char)userCoords[coordsLen]);
+        coordsLen++;
+    }
+    coords[coordsLen] = '\0';
 
     //First: Split the coordinate input:
     int split = GetCoordSplitIndex(coords);

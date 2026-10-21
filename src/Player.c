@@ -18,7 +18,8 @@ Player ** alloc_InitializePlayerArray(int playerCount, Player *** playersArray){
     {
         (*playersArray)[i] = NULL;
     }
-    
+
+    return *playersArray;
 }
 
 /**
@@ -63,6 +64,13 @@ Player* alloc_InitializePlayer(Player** output, char* playerName, int isBot, Bot
         }
     }
     
+    //Ships are not placed yet, start from empty (all zero) bounds rather than leftover memory:
+    ShipBounds noShip = {0, 0, 0, 0, false};
+    (*output)->carrierBounds = noShip;
+    (*output)->battleshipBounds = noShip;
+    (*output)->destroyerBounds = noShip;
+    (*output)->submarineBounds = noShip;
+
     (*output)->usedsmokes = 0;
     // Initialize sweepsLeft to 3
     (*output)->sweepsLeft = 3;

@@ -5,6 +5,9 @@
 
 #define COORDSLIB
 
+//Longest coordinate string the user can type (input is capped at MAXINPUTLENGTH anyway)
+#define MAXCOORDLENGTH 32
+
 int CoordToIndex(char coords[], int start, int end, char startingChar, char endingChar, int coordShift);
 
 int *alloc_ArrayCoordsFromUserCoords(char coords[], char ** outputMsg);

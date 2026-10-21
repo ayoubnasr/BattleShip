@@ -23,7 +23,7 @@ int StringToEnumIndex(char* str, char* arr[], int arrLen);
 
 char * alloc_IntegerToNumeral(int i, int maxInt, char startingChar, char endingChar);
 
-char * alloc_GetCoordsFromIndices(int row, int col, int MaxInt, char startingCoordinate_1, char startingCoordinate_2, char endingCoordinate_2, char endingCoordinate_1, char coord1_shift, char coord2_shift);
+char * alloc_GetCoordsFromIndices(int row, int col, int MaxInt, char startingCoordinate_1, char startingCoordinate_2, char endingCoordinate_1, char endingCoordinate_2, char coord1_shift, char coord2_shift);
 
 int ManageOperation(InputOps operation, char * rawInput);
 

@@ -24,7 +24,12 @@ endif
 # Output executable
 OUTPUT = $(BIN)/battleship$(EXE)
 
-.PHONY: all run clean
+# Unit tests: every source file except the driver (it holds main()), plus the files in tests/
+TEST_DIR = tests
+TEST_SRCs = $(filter-out $(SRC)/Driver.c, $(SRCs)) $(wildcard $(TEST_DIR)/*.c)
+TEST_OUTPUT = $(BIN)/tests$(EXE)
+
+.PHONY: all run test clean
 
 all: $(OUTPUT)
 
@@ -35,6 +40,13 @@ $(OUTPUT): $(SRCs) $(wildcard $(INC)/*.h)
 
 run: $(OUTPUT)
 	./$(OUTPUT)
+
+$(TEST_OUTPUT): $(TEST_SRCs) $(wildcard $(INC)/*.h) $(wildcard $(TEST_DIR)/*.h)
+	$(MKDIR_BIN)
+	$(CC) $(CFLAGS) -o $@ $(TEST_SRCs) $(LDLIBS)
+
+test: $(TEST_OUTPUT)
+	./$(TEST_OUTPUT)
 
 # Clean up
 clean:

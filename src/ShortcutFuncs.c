@@ -10,8 +10,10 @@ void Println(char* str){
 }
 
 int ParseInt(char* str){
-    int res;
+    int res = 0;
     int i = 0;
+
+    if (str[0] == '\0') return -1;
 
     while (str[i] != '\0')
     {
@@ -19,10 +21,10 @@ int ParseInt(char* str){
             Println("Cannot parse to Integer. Please check the input.");
             return -1;
         }
-        res += (str[i] % '9') * pow(10, i);
+        res = res * 10 + (str[i] - '0'); //Reading left to right: every new digit shifts the previous ones up by a power of 10
         i++;
     }
-    
+
     return res;
 }
 

@@ -246,9 +246,9 @@ int UpdateRegionProbabilities(Player *player, int target[4])
             // Check if the cell is part of a sunk ship or is a hit or a miss
             for (int s = 0; s < SHIPCOUNT; s++)
             {
-                if (ships[s].IsSunk &&
+                if ((ships[s].IsSunk &&
                         i >= ships[s].startRow && i <= ships[s].endRow &&
-                        j >= ships[s].startCol && j <= ships[s].endCol ||
+                        j >= ships[s].startCol && j <= ships[s].endCol) ||
                     CheckHitOrMiss(player->grid, cell))
                 {
                     skipCell = true;

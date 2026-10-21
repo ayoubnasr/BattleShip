@@ -1,7 +1,8 @@
 #ifndef DEFS
 #define DEFS
 
-#define GRIDSIZE 200
+//Size of the (square) grid. The whole game scales with it (the presentation shows a 40x40 grid), 10 is the classic board.
+#define GRIDSIZE 10
 
 #define WATER_C '~'
 

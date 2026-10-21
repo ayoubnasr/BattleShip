@@ -34,6 +34,18 @@ int PlaceShipOnGridHorizontal(Player *player,char shipChar, char **grid, char co
  */
 int PlaceShipOnGridHelper(Player *player, char shipChar, char **grid, char coords[], char orientation[], int ship_size[2] , char ** outputMsg) {
 
+    //Accept "h"/"horizontal" and "v"/"vertical" in any case. Normalize to the single letter the area functions expect:
+    if (strcmpi(orientation, "h") == 0 || strcmpi(orientation, "horizontal") == 0){
+        orientation = "h";
+    }
+    else if (strcmpi(orientation, "v") == 0 || strcmpi(orientation, "vertical") == 0){
+        orientation = "v";
+    }
+    else {
+        if (outputMsg != NULL) *outputMsg = CreateString_alloc(1, "Invalid orientation. Please enter H or V.");
+        return -1;
+    }
+
     int *arrayCoords = alloc_ArrayCoordsFromUserCoords(coords, outputMsg);
     if (arrayCoords == NULL) {
         return -1;

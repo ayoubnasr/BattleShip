@@ -121,6 +121,11 @@ char* next(char ** input){
 
     char *word;
 
+    //Skip leading spaces so that "  fire A1" reads the same as "fire A1":
+    while ((*input)[0] == ' '){
+        (*input)++;
+    }
+
     if ((*input)[0] == '\0'){
         word = (char*)(malloc(sizeof(char)));
         word[0] = '\0';
@@ -159,8 +164,12 @@ char* next(char ** input){
 
 int nextInt(char ** input){
     char* nextStr = next(input);
-    
-    return ParseInt(nextStr);
+
+    int res = ParseInt(nextStr);
+
+    free(nextStr);
+
+    return res;
 
 }
 
@@ -178,17 +187,31 @@ char * alloc_Input(char * showMsg, char ** output){
 
     
 
-    char c = ' ';
+    int c = ' '; //int, not char, so that EOF can be told apart from a real character
     int i = 0;
     //int maxLen = MAXINPUTLENGTH;
 
     c = getchar();
 
-    while (c != '\n' && i < MAXINPUTLENGTH - 1)
+    if (c == EOF){
+        //The input stream was closed (eg. Ctrl+D / Ctrl+Z), there is nobody left to play with:
+        Println("");
+        exit(0);
+    }
+
+    while (c != '\n' && c != EOF && i < MAXINPUTLENGTH - 1)
     {
-        inputRes[i] = c;
+        if (c != '\r') { //Ignore the carriage return of Windows line endings
+            inputRes[i] = c;
+            i++;
+        }
         c = getchar();
-        i++;
+    }
+
+    //Input longer than MAXINPUTLENGTH is truncated. Throw away the rest of the line so it doesn't leak into the next prompt:
+    while (c != '\n' && c != EOF)
+    {
+        c = getchar();
     }
 
     inputRes[i] = '\0';

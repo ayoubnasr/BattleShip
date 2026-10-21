@@ -1,6 +1,7 @@
 #include "../include/coordslib.h"
 #include <stdbool.h>
 #include <stdlib.h>
+#include <ctype.h>
 #include "../include/defs.h"
 #include "../include/Player.h"
 #include "../include/ShortcutFuncs.h"
@@ -92,6 +93,7 @@ int applySmokeScreen(char *inputC, Player* player, Player * opponent, char ** ou
     {
         //printf("sunkships: %d\n", opponent->currSunkShips);
         if (outputMsg != NULL) *outputMsg = CreateString_alloc(1, "You cannot use more smoke screens than the ships you've sunk!");
+        free(coords);
         return -1;
     }
 
@@ -116,22 +118,22 @@ int applySmokeScreen(char *inputC, Player* player, Player * opponent, char ** ou
 
 int Artillery(char *inputC, Player* player, Player* opp, int difficulty, char ** outputMsg)
 {
-    int *coords = alloc_ArrayCoordsFromUserCoords(inputC, outputMsg);
-
     if (player->prevSunk==0)
     {
         if (outputMsg != NULL) *outputMsg = CreateString_alloc(1, "Artillery can only be used in the round right after sinking an opponent's ship!");
         return -1;
     }
 
+    int *coords = alloc_ArrayCoordsFromUserCoords(inputC, outputMsg);
+
     if (coords == NULL)
     {
         return -1;
     }
     int hitcount =0;
-    for (int i = coords[0]; i < coords[0] + 2; i++)
+    for (int i = coords[0]; i < coords[0] + 2 && i < GRIDSIZE; i++)
     {
-        for (int j = coords[1]; j < coords[1] + 2; j++)
+        for (int j = coords[1]; j < coords[1] + 2 && j < GRIDSIZE; j++)
         {
             if ((opp->grid)[i][j] == CARRIER_C ||
                 (opp->grid)[i][j] == BATTLESHIP_C ||
@@ -179,12 +181,18 @@ int Torpedo(char *inputC,Player* player,Player* opp, int difficulty, char ** out
 
     
 
-    int coord_1 = CoordToIndex(inputC, 0, strlen(inputC), startingCoordinate_1, endingCoordinate_1, coord_1_shift);
+    //The torpedo takes a single column letter (eg. "C") or a single row number (eg. "7"). Read it in uppercase so "c" works too:
+    char target[MAXCOORDLENGTH];
+    int len = 0;
+    while (inputC[len] != '\0' && len < MAXCOORDLENGTH - 1){
+        target[len] = toupper((unsigned char)inputC[len]);
+        len++;
+    }
+    target[len] = '\0';
 
-    int coord_2 = CoordToIndex(inputC, 0, strlen(inputC), startingCoordinate_2, endingCoordinate_2, coord_2_shift);
+    int coord_1 = CoordToIndex(target, 0, len, startingCoordinate_1, endingCoordinate_1, coord_1_shift);
 
-    printf("inp: %s\n", inputC);
-    printf("COORD1: %d\nCOORD2: %d\n", coord_1, coord_2);
+    int coord_2 = CoordToIndex(target, 0, len, startingCoordinate_2, endingCoordinate_2, coord_2_shift);
 
     if (!IndexWithinRange(coord_1) && !IndexWithinRange(coord_2)){
 
@@ -199,14 +207,14 @@ int Torpedo(char *inputC,Player* player,Player* opp, int difficulty, char ** out
     for (int i = 0; i < GRIDSIZE; i++)
     {
         char * c;
-        c = (coord_1 >= 0)? (&(opp->grid)[i][coord_1]) : (&(opp->grid)[coord_2][i]);
+        c = IndexWithinRange(coord_1)? (&(opp->grid)[i][coord_1]) : (&(opp->grid)[coord_2][i]);
 
         if (IsShip(*c))
         {
             *c = HIT;
             hitCount++;
         }
-        else {
+        else if (*c != HIT) { //Cells that were already hit stay hits
             if (difficulty==0)
             {  
                 *c = MISS;

@@ -37,6 +37,7 @@ void addFirst(D_LinkedList* list, void* data) {
     }
     new_node->data = data;
     new_node->next = list->head;
+    new_node->prev = NULL;
 
     if (list->head == NULL){
         list->tail = new_node;
@@ -140,7 +141,12 @@ int disconnectNode(D_LinkedList* list, D_ListNode* node) {
         list->tail = node->prev;
     }
 
+    node->next = NULL;
+    node->prev = NULL;
+
     list->size--;
+
+    return 1;
 }
 
 
