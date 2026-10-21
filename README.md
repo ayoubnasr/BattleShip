@@ -7,7 +7,7 @@ probability map of your grid, and adjusts how much risk it takes depending on ho
 
 Built for **CMPS 270 (Software Construction) at the American University of Beirut, Fall 2024**.
 
-<p align="center"><img src="docs/screenshot.png" alt="The hard bot hunting down a carrier: hits in red, misses as O, and the bot announcing its last shot" width="360"></p>
+<p align="center"><img src="docs/screenshot.png" alt="A game against the hard bot: hits in red, misses as O, and the bot announcing its last shot" width="360"></p>
 
 ## Features
 

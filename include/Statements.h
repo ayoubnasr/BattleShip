@@ -5,7 +5,7 @@
 #pragma region Welcome Statements
 
 #define TITLE "Battleship"
-#define BYGROUPNAME "by <CFA>"
+#define BYGROUPNAME "by Ayoub Nasr"
 #define WELCOME_STATEMENT "Welcome to Battleship!"
 
 #pragma endregion
