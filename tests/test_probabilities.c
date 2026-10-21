@@ -66,7 +66,7 @@ void CheckRegionSystem(Player *p){
         else {
             CHECK(top != NULL);
             if (top) CHECK_EQ_INT(top[0], expectedMax);
-            CHECK_EQ_INT(category, GetProbabilityCategory(expectedMax));
+            CHECK_EQ_INT(category, GetProbabilityCategory(p, expectedMax));
             CHECK(p->probabilityHeapNodes[region] != NULL);
             if (p->probabilityHeapNodes[region]) CHECK(p->probabilityHeapNodes[region]->data == heap);
 
@@ -133,12 +133,18 @@ void test_hash_region(void){
 }
 
 void test_probability_categories(void){
-    CHECK_EQ_INT(GetProbabilityCategory(HIGHPROB_BASE), HIGHPROB_CATEGORY);
-    CHECK_EQ_INT(GetProbabilityCategory(HIGHPROB_BASE - 1), AVGPROB_CATEGORY);
-    CHECK_EQ_INT(GetProbabilityCategory(AVGPROB_BASE), AVGPROB_CATEGORY);
-    CHECK_EQ_INT(GetProbabilityCategory(LOWPROB_BASE), LOWPROB_CATEGORY);
-    CHECK_EQ_INT(GetProbabilityCategory(0), NO_CATEGORY);
-    CHECK_EQ_INT(GetProbabilityCategory(-3), NO_CATEGORY);
+    Player *p = NewTestPlayer("grid", false, DUMB);
+
+    //With the full fleet the thresholds are the bases
+    CHECK_EQ_INT(p->highProbBase, HIGHPROB_BASE);
+    CHECK_EQ_INT(p->avgProbBase, AVGPROB_BASE);
+
+    CHECK_EQ_INT(GetProbabilityCategory(p, HIGHPROB_BASE), HIGHPROB_CATEGORY);
+    CHECK_EQ_INT(GetProbabilityCategory(p, HIGHPROB_BASE - 1), AVGPROB_CATEGORY);
+    CHECK_EQ_INT(GetProbabilityCategory(p, AVGPROB_BASE), AVGPROB_CATEGORY);
+    CHECK_EQ_INT(GetProbabilityCategory(p, LOWPROB_BASE), LOWPROB_CATEGORY);
+    CHECK_EQ_INT(GetProbabilityCategory(p, 0), NO_CATEGORY);
+    CHECK_EQ_INT(GetProbabilityCategory(p, -3), NO_CATEGORY);
 }
 
 void test_miss_lowers_and_hit_raises_neighbours(void){
@@ -219,4 +225,83 @@ void test_cell_can_hold_ship(void){
 
     target->grid[5][5] = MISS;
     CHECK(!CanCellHoldShip(target, 5, 5)); //a miss itself
+}
+
+void test_fitting_placements_match_formula_on_empty_grid(void){
+    //On an empty grid, counting the placements that fit is exactly the presentation's formula Min(x + 1, GRIDWIDTH - x, SHIPLENGTH)
+    Player *p = NewTestPlayer("grid", false, DUMB);
+
+    for (int length = 2; length <= 5; length++){
+        for (int i = 0; i < GRIDSIZE; i++){
+            for (int j = 0; j < GRIDSIZE; j++){
+                CHECK_EQ_INT(CountFittingPlacements(p, i, j, length, 0), MIN(MIN(j + 1, GRIDSIZE - j), length));
+                CHECK_EQ_INT(CountFittingPlacements(p, i, j, length, 1), MIN(MIN(i + 1, GRIDSIZE - i), length));
+            }
+        }
+    }
+}
+
+void test_probability_learns_from_empty_space(void){
+    Player *target = NewTestPlayerWithFleet("target");
+
+    //E8 (row 7, column 4) boxed in: misses at D8 and G8 leave a 2-cell gap across, misses at E7 and E9 leave no room down.
+    //Of the four ships, only the submarine fits, in one way (E8-F8).
+    target->grid[7][3] = MISS;
+    target->grid[7][6] = MISS;
+    target->grid[6][4] = MISS;
+    target->grid[8][4] = MISS;
+
+    int cell[2] = {7, 4};
+    CalcCutoffProb(target, cell);
+    CalcOverlapProb(target, cell);
+    CHECK_EQ_INT(target->probabilityGrid[7][4], 1);
+
+    //Once the submarine is sunk, nothing fits there anymore
+    SinkShip(target, &target->submarineBounds);
+    CalcCutoffProb(target, cell);
+    CalcOverlapProb(target, cell);
+    CHECK_EQ_INT(target->probabilityGrid[7][4], 0);
+}
+
+void test_thresholds_scale_with_remaining_ships(void){
+    Player *target = NewTestPlayerWithFleet("target");
+    CHECK_EQ_INT(target->highProbBase, HIGHPROB_BASE);
+    CHECK_EQ_INT(target->avgProbBase, AVGPROB_BASE);
+
+    //Destroyer (3) and submarine (2) left: the highest possible probability is 2 * (3 + 2) = 10 instead of 28
+    SinkShip(target, &target->carrierBounds);
+    SinkShip(target, &target->battleshipBounds);
+    UpdateProbabilityThresholds(target);
+    CHECK_EQ_INT(target->highProbBase, 6); //18 * 10 / 28 = 6.4
+    CHECK_EQ_INT(target->avgProbBase, 4);  //10 * 10 / 28 = 3.6
+
+    //A single submarine left: the three categories stay distinct
+    SinkShip(target, &target->destroyerBounds);
+    UpdateProbabilityThresholds(target);
+    CHECK(target->highProbBase > target->avgProbBase);
+    CHECK(target->avgProbBase > LOWPROB_BASE);
+}
+
+void test_late_game_still_has_high_regions(void){
+    //The situation from a real game: most ships sunk, with fixed thresholds every region ended up in the low list
+    Player *bot = NewTestPlayer("bot", true, SMART);
+    Player *target = NewTestPlayerWithFleet("target");
+
+    SinkShip(target, &target->carrierBounds);
+    SinkShip(target, &target->battleshipBounds);
+    SinkShip(target, &target->destroyerBounds);
+    for (int j = 0; j < GRIDSIZE; j += 3) target->grid[8][j] = MISS; //a few misses around
+    RecalculateAllProbabilities(target);
+
+    CHECK(target->probabilityHeapCategoryLists[HIGHPROB_CATEGORY].size > 0);
+    CheckRegionSystem(target);
+
+    //And the bot still finishes the game from there
+    int turns = 0;
+    while (countSunkShips(target) < SHIPCOUNT && turns < GRIDSIZE * GRIDSIZE){
+        BotSmartAttack(bot, target);
+        turns++;
+    }
+    CHECK_EQ_INT(countSunkShips(target), SHIPCOUNT);
+    CheckRegionSystem(target);
 }

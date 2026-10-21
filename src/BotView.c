@@ -91,6 +91,8 @@ int WriteBotSnapshot(const char * path, Player * bot, Player * opponent, int tur
         fputc('\n', file);
     }
 
+    fprintf(file, "thresholds %d %d\n", opponent->highProbBase, opponent->avgProbBase);
+
     fprintf(file, "regions %d\n", PROB_REGION_COUNT);
     for (int r = 0; r < PROB_REGION_COUNT; r++)
     {
@@ -182,6 +184,8 @@ int ReadBotSnapshot(const char * path, BotSnapshot * s){
             ok = fscanf(file, "%d", &s->probabilities[i][j]) == 1;
         }
     }
+
+    ok = ok && ExpectWord(file, "thresholds") && fscanf(file, "%d %d", &s->highProbBase, &s->avgProbBase) == 2;
 
     ok = ok && ExpectWord(file, "regions") && fscanf(file, "%d", &regionCount) == 1 && regionCount == PROB_REGION_COUNT;
     for (int r = 0; ok && r < PROB_REGION_COUNT; r++)
@@ -333,7 +337,8 @@ static void DrawGrid(FILE * out, BotSnapshot * s){
             }
             else if (value <= 0){ color = BRIGHT_BLACK; sprintf(text, "  ."); }
             else {
-                color = CategoryColor(GetProbabilityCategory(value));
+                int category = (value >= s->highProbBase) ? HIGHPROB_CATEGORY : (value >= s->avgProbBase) ? AVGPROB_CATEGORY : LOWPROB_CATEGORY;
+                color = CategoryColor(category);
                 sprintf(text, "%3d", MIN(value, 999));
             }
 
@@ -346,12 +351,13 @@ static void DrawGrid(FILE * out, BotSnapshot * s){
 
     fprintf(out, "\n");
     if (smart){
-        fprintf(out, "  %s%s%s high  %s%s%s average  %s%s%s low  %s.%s no ship fits  %sx%s hit  O miss  %s#%s sunk  %s*%s planned  < last shot\n",
-            BRIGHT_RED, "22", RESET, YELLOW, "14", RESET, CYAN, " 6", RESET, BRIGHT_BLACK, RESET, RED, RESET, BRIGHT_BLACK, RESET, BRIGHT_MAGENTA, RESET);
+        fprintf(out, "  Chance: %s%d+%s high   %s%d+%s average   %s%d+%s low   %s.%s no ship fits\n",
+            BRIGHT_RED, s->highProbBase, RESET, YELLOW, s->avgProbBase, RESET, CYAN, LOWPROB_BASE, RESET, BRIGHT_BLACK, RESET);
+        fprintf(out, "  Marks:  %sx%s hit   O miss   %s#%s sunk   %s*%s planned   < last shot\n", RED, RESET, BRIGHT_BLACK, RESET, BRIGHT_MAGENTA, RESET);
     }
     else {
-        fprintf(out, "  ? a ship could be here   %s.%s no ship fits   %sx%s hit   O miss   %s#%s sunk   < last shot\n",
-            BRIGHT_BLACK, RESET, RED, RESET, BRIGHT_BLACK, RESET);
+        fprintf(out, "  Chance: ? a ship could be here   %s.%s no ship fits\n", BRIGHT_BLACK, RESET);
+        fprintf(out, "  Marks:  %sx%s hit   O miss   %s#%s sunk   < last shot\n", RED, RESET, BRIGHT_BLACK, RESET);
     }
 }
 

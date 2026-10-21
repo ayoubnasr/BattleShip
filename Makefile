@@ -25,7 +25,11 @@ TEST_DIR = tests
 TEST_SRCs = $(filter-out $(SRC)/Driver.c, $(SRCs)) $(wildcard $(TEST_DIR)/*.c)
 TEST_OUTPUT = $(BIN)/tests$(EXE)
 
-.PHONY: all run test clean
+# Benchmark of the hard bot (tools/benchmark.c)
+BENCH_SRCs = $(filter-out $(SRC)/Driver.c, $(SRCs)) tools/benchmark.c
+BENCH_OUTPUT = $(BIN)/benchmark$(EXE)
+
+.PHONY: all run test benchmark clean
 
 all: $(OUTPUT)
 
@@ -42,9 +46,16 @@ $(TEST_OUTPUT): $(TEST_SRCs) $(wildcard $(INC)/*.h) $(wildcard $(TEST_DIR)/*.h)
 test: $(TEST_OUTPUT)
 	./$(TEST_OUTPUT)
 
+$(BENCH_OUTPUT): $(BENCH_SRCs) $(wildcard $(INC)/*.h)
+	$(CC) $(CFLAGS) -O2 -o $@ $(BENCH_SRCs) $(LDLIBS)
+
+benchmark: $(BENCH_OUTPUT)
+	./$(BENCH_OUTPUT) 2000 1
+	./$(BENCH_OUTPUT) 2000 3
+
 # Clean up (MinGW make may run recipes in cmd or in sh: on Windows try both, ignoring the one that doesn't exist)
 clean:
-	-rm -f $(OUTPUT) $(TEST_OUTPUT)
+	-rm -f $(OUTPUT) $(TEST_OUTPUT) $(BENCH_OUTPUT)
 ifeq ($(OS),Windows_NT)
-	-del /Q $(subst /,\,$(OUTPUT) $(TEST_OUTPUT)) 2>NUL
+	-del /Q $(subst /,\,$(OUTPUT) $(TEST_OUTPUT) $(BENCH_OUTPUT)) 2>NUL
 endif

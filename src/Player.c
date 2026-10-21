@@ -244,16 +244,43 @@ int HashRegion(int i, int j){
 }
 
 /**
- * Returns the category (index of the category list) that a region belongs to according to its highest probability.
+ * Returns the category (index of the category list) that a region belongs to according to its highest probability, using the player's
+ * current thresholds (see UpdateProbabilityThresholds()).
  * Returns NO_CATEGORY when the probability is below LOWPROB_BASE (no ship can be there).
  */
-int GetProbabilityCategory(int probability){
+int GetProbabilityCategory(Player * player, int probability){
 
-    if (probability >= HIGHPROB_BASE) return HIGHPROB_CATEGORY;
-    if (probability >= AVGPROB_BASE) return AVGPROB_CATEGORY;
+    if (probability >= player->highProbBase) return HIGHPROB_CATEGORY;
+    if (probability >= player->avgProbBase) return AVGPROB_CATEGORY;
     if (probability >= LOWPROB_BASE) return LOWPROB_CATEGORY;
 
     return NO_CATEGORY;
+}
+
+/**
+ * Scales the high and average category thresholds to the player's ships that are still afloat.
+ * 
+ * The highest probability a cell can have is 2 * (sum of the lengths of the remaining ships): every ship passes through a cell in at most
+ * "length" ways horizontally and "length" ways vertically. HIGHPROB_BASE and AVGPROB_BASE are set for the full fleet (28), so they are
+ * multiplied by (highest possible now / highest possible with the full fleet). With the full fleet they stay 18 and 10.
+ * Without this, sinking ships would push every region down to the low category.
+ */
+int UpdateProbabilityThresholds(Player * player){
+
+    int fullFleet = 2 * (CARRIER_LENGTH + BATTLESHIP_LENGTH + DESTROYER_LENGTH + SUBMARINE_LENGTH);
+
+    int remaining = 2 * ((player->carrierBounds.IsSunk ? 0 : CARRIER_LENGTH) + (player->battleshipBounds.IsSunk ? 0 : BATTLESHIP_LENGTH)
+        + (player->destroyerBounds.IsSunk ? 0 : DESTROYER_LENGTH) + (player->submarineBounds.IsSunk ? 0 : SUBMARINE_LENGTH));
+
+    //Rounded to the nearest integer:
+    player->highProbBase = (HIGHPROB_BASE * remaining + fullFleet / 2) / fullFleet;
+    player->avgProbBase = (AVGPROB_BASE * remaining + fullFleet / 2) / fullFleet;
+
+    //Keep the three categories distinct even with a single small ship left:
+    player->avgProbBase = MAX(player->avgProbBase, LOWPROB_BASE + 1);
+    player->highProbBase = MAX(player->highProbBase, player->avgProbBase + 1);
+
+    return 1;
 }
 
 /**
@@ -270,7 +297,7 @@ int PlaceHeapInCategory(Player * player, int heapIndex){
 
     int * highestCell = BinHeap_FindHighestProbabilityCell(heap);
 
-    int newCategory = (highestCell == NULL) ? NO_CATEGORY : GetProbabilityCategory(highestCell[0]);
+    int newCategory = (highestCell == NULL) ? NO_CATEGORY : GetProbabilityCategory(player, highestCell[0]);
     int oldCategory = player->probabilityHeapCategory[heapIndex];
 
     if (newCategory == oldCategory) return 1; //This means that the heap is at the right location.
@@ -351,6 +378,7 @@ int InitializeProbabilityHeaps(Player * player){
     }
 
     //Now here, we go over the hashset and we categorize the heaps into the three category arrays:
+    UpdateProbabilityThresholds(player);
 
     for (int i = 0; i < PROB_REGION_COUNT; i++)
     {

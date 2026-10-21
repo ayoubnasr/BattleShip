@@ -47,6 +47,7 @@ typedef struct BotSnapshot{
     char grid[GRIDSIZE][GRIDSIZE];          //What the bot knows: BOT_VIEW_UNKNOWN, HIT, MISS or BOT_VIEW_SUNK
     int probabilities[GRIDSIZE][GRIDSIZE];  //Smart bot: probability of each unknown cell. Easy bot: 1 if a ship could still be there, else 0.
     int regionCategory[PROB_REGION_COUNT];  //Category of every region (NO_CATEGORY when it has no cell left)
+    int highProbBase, avgProbBase;          //The category thresholds at the time (they scale down as ships sink)
 
     int taskCount;                          //Cells planned on the bot's stack (next first)
     int tasks[BOT_VIEW_MAX_TASKS][2];
