@@ -36,6 +36,8 @@ typedef struct ShipBounds {
 #define NO_CATEGORY -1 //Regions with no cell left to target (all shot, or zero probability) are not in any list
 
 //THE HIGHEST A PROBABILITY CAN BE IS 2(5 + 4 + 3 + 2) = 28
+//These bases are for the full fleet. As ships sink the highest possible probability drops (eg. 2(3 + 2) = 10 with only the destroyer and
+//submarine left), so the average and high bases are scaled down by the same ratio (see UpdateProbabilityThresholds()).
 #define NULLCHANCEPROB 0
 #define LOWPROB_BASE 1
 #define AVGPROB_BASE 10
@@ -137,6 +139,10 @@ typedef struct Player{
     D_ListNode ** probabilityHeapNodes;
     int * probabilityHeapCategory;
 
+    //The probabilities from which a region is in the high and average categories, scaled to the ships still afloat:
+    int highProbBase;
+    int avgProbBase;
+
     int currTargetCategory; //This is used to allow the bot to follow a pattern picking once from every category every time.
 
     //Stack Memory:
@@ -164,7 +170,9 @@ int InitializeProbabilityHeaps(Player * player);
 
 int HashRegion(int i, int j);
 
-int GetProbabilityCategory(int probability);
+int GetProbabilityCategory(Player * player, int probability);
+
+int UpdateProbabilityThresholds(Player * player);
 
 int PlaceHeapInCategory(Player * player, int heapIndex);
 

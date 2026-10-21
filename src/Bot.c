@@ -905,6 +905,9 @@ int RecalculateAllProbabilities(Player * player){
 
     UpdateRegionProbabilities(player, wholeGrid);
 
+    //Fewer ships afloat means lower probabilities everywhere: scale the category thresholds down with them before re-categorizing
+    UpdateProbabilityThresholds(player);
+
     return UpdateHeapsWithinBounds(player, 0, GRIDSIZE - 1, 0, GRIDSIZE - 1);
 }
 

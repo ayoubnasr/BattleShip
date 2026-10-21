@@ -14,6 +14,35 @@ int CheckHitOrMiss(char** grid, int target[2]) // checks if the cell is a hit or
 }
 
 
+/**
+ * Counts the placements of a ship of length shipLength that cover the cell (rowc, colc) in one orientation (vertical = 0: horizontal,
+ * vertical = 1: vertical) and fit on the grid: every cell of the placement is inside the grid, is not a MISS and is not part of a sunk ship.
+ * Hits of ships still afloat don't block: the ship could be lying on them.
+ */
+int CountFittingPlacements(Player *player, int rowc, int colc, int shipLength, int vertical)
+{
+    int count = 0;
+
+    // every placement covering the cell starts between shipLength - 1 cells before it and the cell itself
+    for (int start = -(shipLength - 1); start <= 0; start++)
+    {
+        int fits = 1;
+
+        for (int k = start; k < start + shipLength && fits; k++)
+        {
+            int r = vertical ? rowc + k : rowc;
+            int c = vertical ? colc : colc + k;
+
+            if (r < 0 || r >= GRIDSIZE || c < 0 || c >= GRIDSIZE || player->grid[r][c] == MISS || IsCellOfSunkShip(player, r, c))
+                fits = 0;
+        }
+
+        count += fits;
+    }
+
+    return count;
+}
+
 int CalcCutoffProb(Player *player, int target[2]) // player here is the opponent
 {
     int rowc = target[0];
@@ -44,17 +73,13 @@ int CalcCutoffProb(Player *player, int target[2]) // player here is the opponent
         if (shipLength == 1)
             shipLength = ships[s].endCol - ships[s].startCol + 1;
 
-        int Horiprob = (colc + 1 < GRIDSIZE - colc) ? colc + 1 : GRIDSIZE - colc;
-        if (Horiprob > shipLength)
-            Horiprob = shipLength;
-        /*the formula is the probability of the ship to pass here horizontally is
-        the minimum between nb of cells left to the cell, right to the cell and the shiplength
+        /*the probability of the ship to pass here is the number of its placements (horizontal and vertical) that cover the cell and
+        really fit: inside the grid, with no miss and no sunk ship in the way. On an empty grid this is the same as the formula
+        min(nb of cells left to the cell, right to the cell, shiplength) used by InitalizeCutOffProb(), but it also learns from the
+        empty space left between misses and sunk ships.
         */
-
-        int Vertiprob = (rowc + 1 < GRIDSIZE - rowc) ? rowc + 1 : GRIDSIZE - rowc;
-        if (Vertiprob > shipLength)
-            Vertiprob = shipLength;
-        // same formula but vertical
+        int Horiprob = CountFittingPlacements(player, rowc, colc, shipLength, 0);
+        int Vertiprob = CountFittingPlacements(player, rowc, colc, shipLength, 1);
 
         player->probabilityGrid[rowc][colc] += Horiprob + Vertiprob; // adding both probabilities to the cell in the probgrid
 
@@ -141,27 +166,20 @@ int CalcOverlapProb(Player *player, int target[2])
         for (int i = 0; i < shipLength; i++)
         {
             // hits on ships that are already sunk tell nothing about where the remaining ships are, so they don't count (IsOpenHit)
+            // (misses are not counted here: CalcCutoffProb() already leaves out every placement that a miss blocks)
             if (rowc - i >= 0 && IsOpenHit(player, rowc - i, colc))
                 adjustment++;
-            else if (rowc - i >= 0 && player->grid[rowc - i][colc] == MISS)
-                adjustment--;
 
             if (colc - i >= 0 && IsOpenHit(player, rowc, colc - i))
                 adjustment++;
-            else if (colc - i >= 0 && player->grid[rowc][colc - i] == MISS)
-                adjustment--;
 
             if (colc + i < GRIDSIZE && IsOpenHit(player, rowc, colc + i))
                 adjustment++;
-            else if (colc + i < GRIDSIZE && player->grid[rowc][colc + i] == MISS)
-                adjustment--;
 
             if (rowc + i < GRIDSIZE && IsOpenHit(player, rowc + i, colc))
                 adjustment++;
-            else if (rowc + i < GRIDSIZE && player->grid[rowc + i][colc] == MISS)
-                adjustment--;
             // for all above, below, left or right cells to a certain cell by the size of the ship, we check
-            // if these are hits misses or none and update the variable adjustments based on that
+            // if these are hits and update the variable adjustments based on that
         }
     }
 

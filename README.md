@@ -78,8 +78,8 @@ The hard bot is the heart of the project. The full design is in the
 [`src/Bot.c`](src/Bot.c) walks through the thinking behind it. In short:
 
 1. **Probability grid** ([`CalcProbs.c`](src/CalcProbs.c)). Every cell of your grid gets a score: the number of ways the remaining ships
-   could pass through it, worked out with a formula, not loops. Hits raise the score of the cells in line with them and misses lower it.
-   When a ship sinks, the whole grid is recalculated without it.
+   could lie across it while fitting in the empty space, with no miss and no sunk ship in the way. Hits nearby raise the score, since
+   the rest of a damaged ship must be close. When a ship sinks, the whole grid is recalculated without it.
 2. **Probability regions** ([`Player.c`](src/Player.c), [`Bot.c`](src/Bot.c)). Always shooting the highest-scoring cell would make the bot
    predictable. So the grid is split into small regions, and each region keeps its cells in a **binomial heap**, ordered by probability.
    The regions are sorted into **high, average and low** probability lists. The bot picks a random region from a list, then takes that
@@ -125,7 +125,7 @@ Most of the game and the bot's intelligence can be changed with macros:
 | --- | --- | --- |
 | `GRIDSIZE` | [`include/defs.h`](include/defs.h) | Size of the (square) grid. |
 | `PROB_REGION_WIDTH` / `PROB_REGION_HEIGHT` | [`include/Player.h`](include/Player.h) | Region size: the "resolution" of the bot's statistics. Smaller regions mean a sharper bot. |
-| `HIGHPROB_BASE` / `AVGPROB_BASE` / `LOWPROB_BASE` | [`include/Player.h`](include/Player.h) | Probability needed for a region to be in the high, average or low list. |
+| `HIGHPROB_BASE` / `AVGPROB_BASE` / `LOWPROB_BASE` | [`include/Player.h`](include/Player.h) | Probability needed for a region to be in the high, average or low list with the full fleet. As ships sink, the high and average thresholds scale down with the highest score still possible. |
 | `RISK_*`, `LOWRISK_EXPLORE_CHANCE` | [`include/Player.h`](include/Player.h) | How quickly the bot feels threatened, and how adventurous it gets at low risk. |
 
 ## Tests

@@ -6,8 +6,14 @@
 typedef struct Player Player;
 
 /**
+ * Counts the placements of a ship of the given length that cover the cell in one orientation (0 horizontal, 1 vertical) and fit:
+ * inside the grid, with no miss and no sunk ship in the way.
+ */
+int CountFittingPlacements(Player *player, int rowc, int colc, int shipLength, int vertical);
+
+/**
  * Calculates the number of possible placements for a ship in a specific square
- * without exceeding the boundaries and updates the probability grid.
+ * that fit in the empty space around it (inside the grid, no miss and no sunk ship in the way) and updates the probability grid.
  * 
  * Excludes sunk ships from calculations.
  * 
@@ -20,7 +26,8 @@ int CalcCutoffProb(Player *player, int target[2]);
 int InitalizeCutOffProb(Player *player, int target[2]);
 
 /**
- * Adjusts the probability grid based on whether the target square is a hit or miss.
+ * Raises the probability of the target square for every hit (of a ship still afloat) within reach of the remaining ships along its
+ * row and column. Misses are already accounted for by CalcCutoffProb().
  * 
  * Excludes sunk ships from calculations.
  * 

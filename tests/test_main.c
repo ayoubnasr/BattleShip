@@ -64,6 +64,10 @@ void test_miss_lowers_and_hit_raises_neighbours(void);
 void test_sinking_recalculates_and_clears_tasks(void);
 void test_sinking_keeps_tasks_for_other_damaged_ship(void);
 void test_cell_can_hold_ship(void);
+void test_fitting_placements_match_formula_on_empty_grid(void);
+void test_probability_learns_from_empty_space(void);
+void test_thresholds_scale_with_remaining_ships(void);
+void test_late_game_still_has_high_regions(void);
 
 //test_botview.c
 void test_decision_category_rotation(void);
@@ -119,6 +123,10 @@ int main(void){
     RUN_TEST(test_sinking_recalculates_and_clears_tasks);
     RUN_TEST(test_sinking_keeps_tasks_for_other_damaged_ship);
     RUN_TEST(test_cell_can_hold_ship);
+    RUN_TEST(test_fitting_placements_match_formula_on_empty_grid);
+    RUN_TEST(test_probability_learns_from_empty_space);
+    RUN_TEST(test_thresholds_scale_with_remaining_ships);
+    RUN_TEST(test_late_game_still_has_high_regions);
 
     printf("\n-- Bot --\n");
     RUN_TEST(test_bot_task_stack_order);
