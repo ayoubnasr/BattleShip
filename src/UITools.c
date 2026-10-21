@@ -123,10 +123,14 @@ void SetBold(){
 
 void ClearScreen(){
 
+    int res; //The result is not needed: if clearing fails the game just goes on below the old text
+
     #ifdef _WIN32
-        system("cls");
+        res = system("cls");
     #else
-        system("clear");  // Unix-based systems (Linux, macOS)
+        res = system("clear");  // Unix-based systems (Linux, macOS)
     #endif
+
+    (void)res;
 
 }

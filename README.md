@@ -96,6 +96,47 @@ The hard bot is the heart of the project. The full design is in the
 
 The easy bot fires at random, but it never fires at the same cell twice and it skips cells where no remaining ship could fit.
 
+### Teaching the probabilities to read empty space
+
+The first version of the probability grid had a weakness that showed late in a game. After the bot had fired at most of the board and
+sunk a few ships, **every region fell into the low list**, so the high/average/low rotation stopped meaning anything. It had two causes:
+
+1. **The scores couldn't see empty space.** A cell's score was the number of ways each ship could cross it while staying inside the grid
+   edges, minus 1 for every miss nearby. Misses and sunk ships were only a rough patch on top. A cell in a 2-cell gap between two misses
+   still scored about 7, when only the 2-long submarine fits there, in exactly 1 way.
+2. **The list thresholds were fixed for the full fleet.** High meant 18+ and average 10+, out of a maximum of 2 × (5 + 4 + 3 + 2) = 28.
+   But once only the destroyer and the submarine are left, no cell can score more than 2 × (3 + 2) = 10, so nothing could ever be high
+   again.
+
+The fixes, both in the spirit of the original design:
+
+1. **Count the placements that really fit** ([`CalcCutoffProb()`](src/CalcProbs.c)). For each ship still afloat, count the ways it could
+   cross the cell with no miss and no sunk ship in the way. The bonus for nearby hits stays, and the −1 per miss goes, since blocked
+   placements are no longer counted. On an empty grid this gives exactly the same numbers as before (the presentation's formula
+   `Min(x + 1, GRIDWIDTH - x, SHIPLENGTH)`), so only the late game changes.
+2. **Scale the thresholds with the fleet** ([`UpdateProbabilityThresholds()`](src/Player.c)). Keep the original ratios (18/28 and 10/28)
+   against the highest score still possible. They stay 18 and 10 with the full fleet, become 6 and 4 with only the destroyer and the
+   submarine left, and update whenever a ship sinks.
+
+**Results.** The hard bot played 2,000 games against randomly placed fleets with each version, counting the turns it needs to sink
+everything:
+
+| | Before | After | Change |
+| --- | --- | --- | --- |
+| Average turns to win, normal risk | 43.6 | **41.9** | 1.7 fewer turns (−4%) |
+| Average turns to win, extremely high risk | 38.7 | **37.4** | 1.3 fewer turns (−3%) |
+| Worst game, normal risk | 74 | **69** | |
+| Worst game, extremely high risk | 84 | **62** | 22 fewer turns |
+
+The averages are measured to within about ±0.25 turns (standard error), so the improvement is real, not luck. It is moderate because
+most of the bot's choices are deliberately randomised to keep it unpredictable. The biggest gain is in its worst games: it no longer
+wastes shots on space where no ship fits. At extremely high risk the bot always takes the single hottest cell, so that row shows the
+difference in the probability numbers alone.
+
+Run `make benchmark` to reproduce these numbers ([`tools/benchmark.c`](tools/benchmark.c)). The random generator is seeded with a fixed
+value, so every run on the same code gives the same result. The "before" column is the same benchmark run on the previous version of
+the code.
+
 ### Watch the bot think
 
 When a PvE game starts, answer `yes` to **"Show the bot's thinking in a second window?"** and a second window shows the bot's mind,
@@ -142,7 +183,8 @@ This runs the unit tests in [`tests/`](tests). They need nothing but the compile
 - both bots playing complete games
 - the bot's view: its decisions, and its snapshots written and read back
 
-CI runs them on Linux and macOS on every push.
+CI runs them on Linux and macOS on every push. `make benchmark` measures how many turns the hard bot needs to win (see
+[above](#teaching-the-probabilities-to-read-empty-space)).
 
 ## Project structure
 
@@ -165,6 +207,7 @@ CI runs them on Linux and macOS on every push.
 │   └── defs.c
 ├── include/             headers (constants and settings are in defs.h and Player.h)
 ├── tests/               unit tests (make test)
+├── tools/               benchmark of the hard bot (make benchmark)
 ├── docs/                presentation, design documents, backlog and test plan
 └── Makefile
 ```
