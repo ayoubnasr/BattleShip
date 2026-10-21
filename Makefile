@@ -8,7 +8,7 @@ CFLAGS = -I$(INC) -std=gnu11 -Wall -Wno-unused-variable -Wno-unused-label -Wno-u
 LDLIBS = -lm
 
 # Source files
-SRCs = $(SRC)/coordslib.c $(SRC)/defs.c $(SRC)/Driver.c $(SRC)/InputLib.c $(SRC)/ShipPlacement.c $(SRC)/ShortcutFuncs.c $(SRC)/Attacks.c $(SRC)/Player.c $(SRC)/UITools.c $(SRC)/BinomialHeap.c $(SRC)/Bot.c $(SRC)/CalcProbs.c $(SRC)/D_LinkedList.c
+SRCs = $(SRC)/coordslib.c $(SRC)/defs.c $(SRC)/Driver.c $(SRC)/InputLib.c $(SRC)/ShipPlacement.c $(SRC)/ShortcutFuncs.c $(SRC)/Attacks.c $(SRC)/Player.c $(SRC)/UITools.c $(SRC)/BinomialHeap.c $(SRC)/Bot.c $(SRC)/CalcProbs.c $(SRC)/D_LinkedList.c $(SRC)/BotView.c
 
 # Executables get the .exe extension on Windows. (bin/ is kept in git with a .gitkeep file, so no mkdir is needed on any shell.)
 ifeq ($(OS),Windows_NT)

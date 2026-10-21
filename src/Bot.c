@@ -9,6 +9,22 @@
 static int CountSunkFlags(Player * player);
 static int HasOpenHits(Player * player);
 
+/**
+ * Remembers what the bot decided this turn and why (see BotDecision in Bot.h), for the bot's view. The category and region are looked up
+ * from the cell when row and col are a cell of the grid.
+ */
+static void RecordDecision(Player * bot, Player * opponent, BotDecisionType type, int row, int col, int probability, int explored){
+
+    BotDecision decision = {type, row, col, probability, NO_CATEGORY, -1, explored, bot->riskFactor};
+
+    if (row >= 0 && col >= 0 && type != DECISION_ARTILLERY){
+        decision.region = HashRegion(row, col);
+        decision.category = opponent->probabilityHeapCategory[decision.region];
+    }
+
+    bot->lastDecision = decision;
+}
+
 
 
 /**
@@ -108,6 +124,7 @@ void BotSmartAttack(Player * bot, Player * opponent){
 
 
         int getCoord = -1;
+        BotDecisionType decisionType = DECISION_CATEGORY;
 
         if (bot->riskFactor < HIGH_RISK){
 
@@ -132,9 +149,11 @@ void BotSmartAttack(Player * bot, Player * opponent){
         else {
             if (bot->riskFactor == EXTREMELYHIGH_RISK){
                 getCoord = GetHighestProbability(&row, &col, opponent);
+                decisionType = DECISION_HOTTEST_CELL;
             }
             else {
                 getCoord = GetRandomHighestProbCell(&row, &col, opponent);
+                decisionType = DECISION_HIGHEST_CATEGORY;
             }
         }
 
@@ -142,7 +161,10 @@ void BotSmartAttack(Player * bot, Player * opponent){
             //All categories are empty: the formulas give no cell a chance anymore (it can happen late in the game when misses pile up
             //around the last ships). Fall back to any cell that was not shot yet.
             PickRandomCell(&row, &col, opponent, false);
+            decisionType = DECISION_FALLBACK;
         }
+
+        RecordDecision(bot, opponent, decisionType, row, col, opponent->probabilityGrid[row][col], explore);
 
 
         //Now I must attack the target:
@@ -198,6 +220,8 @@ void BotDumbAttack(Player * bot, Player * opponent){
     if (PickRandomCell(&row, &col, opponent, true) < 0){
         PickRandomCell(&row, &col, opponent, false);
     }
+
+    RecordDecision(bot, opponent, DECISION_RANDOM, row, col, 0, 0);
 
     char * coords = alloc_GetCoordsFromIndices(row, col, GRIDSIZE, startingCoordinate_1, startingCoordinate_2,
      endingCoordinate_1, endingCoordinate_2, coord_1_shift, coord_2_shift);
@@ -268,6 +292,8 @@ int BotUseSpecialWeapon(Player * bot, Player * opponent){
             char * input = (bestType == 0) ? alloc_IntegerToNumeral(bestLine + coord_2_shift, GRIDSIZE, startingCoordinate_2, endingCoordinate_2)
                                            : alloc_IntegerToNumeral(bestLine + coord_1_shift, GRIDSIZE, startingCoordinate_1, endingCoordinate_1);
 
+            RecordDecision(bot, opponent, DECISION_TORPEDO, (bestType == 0) ? bestLine : -1, (bestType == 1) ? bestLine : -1, bestSum, 0);
+
             int res = Torpedo(input, bot, opponent, 0, &msg);
 
             free(input);
@@ -302,6 +328,8 @@ int BotUseSpecialWeapon(Player * bot, Player * opponent){
 
     char * coords = alloc_GetCoordsFromIndices(bestRow, bestCol, GRIDSIZE, startingCoordinate_1, startingCoordinate_2,
      endingCoordinate_1, endingCoordinate_2, coord_1_shift, coord_2_shift);
+
+    RecordDecision(bot, opponent, DECISION_ARTILLERY, bestRow, bestCol, bestSum, 0);
 
     int res = Artillery(coords, bot, opponent, 0, &msg);
 
@@ -786,6 +814,8 @@ int BotFire(void** args){
     Player * opponent = *(Player**)args[3];
 
     if (opponent->grid[row][col] == HIT || opponent->grid[row][col] == MISS) return 0;
+
+    RecordDecision(bot, opponent, DECISION_TASK, row, col, opponent->probabilityGrid[row][col], 0);
 
     return BotFireHelper(row, col, bot, opponent) > 0;
 
