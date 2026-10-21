@@ -13,6 +13,38 @@ typedef enum BotIQ{
 #define TASKFLAG_LOWPRIORITY 0
 #define TASKFLAG_HIGHPRIORITY 1
 
+/**
+ * The kinds of decisions the bot can make on its turn, one per branch of its attack functions.
+ */
+typedef enum BotDecisionType{
+    DECISION_NONE,              //The bot hasn't played yet
+    DECISION_TORPEDO,           //Torpedo on the row/column with the highest probability sum
+    DECISION_ARTILLERY,         //Artillery on the 2x2 area with the highest probability sum
+    DECISION_TASK,              //Followed a task from its stack memory (a cell next to a hit)
+    DECISION_CATEGORY,          //Took its turn in the category rotation: random region from that category list, then the region's best cell
+    DECISION_HIGHEST_CATEGORY,  //High risk: random region from the highest non-empty category, then its best cell
+    DECISION_HOTTEST_CELL,      //Extremely high risk: the single highest probability cell of the grid
+    DECISION_FALLBACK,          //No cell had any probability left: a random cell that was not shot yet
+    DECISION_RANDOM             //Easy bot: a random cell that could still hold a ship
+} BotDecisionType;
+
+/**
+ * What the bot decided on its last turn, and why. The attack functions fill it in as they decide, so that the bot's view (BotView.c) can
+ * show it. Recording a decision never changes it.
+ */
+typedef struct BotDecision{
+
+    BotDecisionType type;
+
+    int row, col;       //Targeted cell. Artillery: the top-left cell of the 2x2 area. Torpedo: the row or the column, the other one is -1.
+    int probability;    //Probability of the cell when it was chosen (artillery/torpedo: the probability sum of the area)
+    int category;       //Category list of the targeted cell's region when it was chosen (-1 when it was in none)
+    int region;         //Region index of the targeted cell (-1 for artillery and torpedo)
+    int explored;       //1 if the bot left the plans on its stack to explore elsewhere (low risk)
+    int riskFactor;     //The bot's risk level when it decided
+
+} BotDecision;
+
 typedef struct{
 
     /**

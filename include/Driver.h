@@ -18,6 +18,7 @@
 #include "ShortcutFuncs.h"
 #include "ShipPlacement.h"
 #include "UITools.h"
+#include "BotView.h"
 
 #define DRIVER
 

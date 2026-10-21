@@ -65,6 +65,16 @@ void test_sinking_recalculates_and_clears_tasks(void);
 void test_sinking_keeps_tasks_for_other_damaged_ship(void);
 void test_cell_can_hold_ship(void);
 
+//test_botview.c
+void test_decision_category_rotation(void);
+void test_decision_task(void);
+void test_decision_risk_levels(void);
+void test_decision_low_risk_exploring(void);
+void test_decision_weapons_and_easy_bot(void);
+void test_snapshot_round_trip(void);
+void test_snapshot_rejects_bad_files(void);
+void test_draw_bot_view(void);
+
 int main(void){
     srand((unsigned)time(NULL));
 
@@ -123,6 +133,16 @@ int main(void){
     RUN_TEST(test_smart_bot_uses_torpedo_after_third_ship);
     RUN_TEST(test_smart_bot_full_games_with_weapons);
     RUN_TEST(test_risk_factor);
+
+    printf("\n-- Bot view --\n");
+    RUN_TEST(test_decision_category_rotation);
+    RUN_TEST(test_decision_task);
+    RUN_TEST(test_decision_risk_levels);
+    RUN_TEST(test_decision_low_risk_exploring);
+    RUN_TEST(test_decision_weapons_and_easy_bot);
+    RUN_TEST(test_snapshot_round_trip);
+    RUN_TEST(test_snapshot_rejects_bad_files);
+    RUN_TEST(test_draw_bot_view);
 
     printf("\n%d tests, %d failed\n", tests_run, tests_failed);
     return tests_failed == 0 ? EXIT_SUCCESS : EXIT_FAILURE;

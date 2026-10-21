@@ -109,6 +109,9 @@ Player* alloc_InitializePlayer(Player** output, char* playerName, int isBot, Bot
         (*output)->recentOpponentHits[i] = 0;
     }
 
+    BotDecision noDecision = {DECISION_NONE, -1, -1, 0, NO_CATEGORY, -1, 0, NORMAL_RISK};
+    (*output)->lastDecision = noDecision;
+
     return *output;
 }
 

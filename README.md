@@ -96,6 +96,27 @@ The hard bot is the heart of the project. The full design is in the
 
 The easy bot fires at random, but it never fires at the same cell twice and it skips cells where no remaining ship could fit.
 
+### Watch the bot think
+
+When a PvE game starts, answer `yes` to **"Show the bot's thinking in a second window?"** and a second window shows the bot's mind,
+updated after every turn:
+
+- **Its map of your grid:** the probability of a ship on every cell, coloured by category, with its hits, misses and the ships it sank.
+  It only shows what the bot knows, never where your ships are.
+- **Its last move, explained:** which branch of its logic it took (a weapon, a plan from its stack, its turn in the high/average/low
+  rotation, the hottest cell...) and why.
+- **Its plans:** the cells waiting on its task stack, in the order it will try them (marked `*` on the map).
+- **Its regions:** which list (high, average or low) every region is in, and the region it last picked from.
+- **Its risk:** your accuracy, your recent form and the ships sunk on each side, compared with the thresholds that change its behaviour.
+
+On Windows the window opens by itself. On Linux and macOS, open a second terminal in the same folder and run the command the game prints:
+`./bin/battleship --bot-view battleship-bot-view.txt`.
+
+<p align="center"><img src="docs/bot-view.png" alt="The bot's view: its probability map of the player's grid, with its next planned shot, its explanation of its last move, its regions and its risk" width="640"></p>
+
+The game writes a snapshot of the bot's state to `battleship-bot-view.txt` after every turn, and the viewer (the same program started with
+`--bot-view`) redraws it whenever it changes. The code is in [`src/BotView.c`](src/BotView.c).
+
 ### Tuning
 
 Most of the game and the bot's intelligence can be changed with macros:
@@ -119,6 +140,7 @@ This runs the unit tests in [`tests/`](tests). They need nothing but the compile
 - ship placement and every attack
 - the probability grid and the region system (its consistency is checked after every shot)
 - both bots playing complete games
+- the bot's view: its decisions, and its snapshots written and read back
 
 CI runs them on Linux and macOS on every push.
 
@@ -130,6 +152,7 @@ CI runs them on Linux and macOS on every push.
 │   ├── Driver.c         main(), menus, turns and everything printed on screen
 │   ├── Player.c         player setup, grid display, probability regions
 │   ├── Bot.c            the bots: targeting, task stack, weapons, risk, ship placement
+│   ├── BotView.c        the "watch the bot think" window: snapshots and their display
 │   ├── CalcProbs.c      probability formulas
 │   ├── Attacks.c        fire, radar, smoke screen, artillery, torpedo
 │   ├── ShipPlacement.c  placing ships on a grid

@@ -7,6 +7,10 @@ build/
 *.exe
 *.out
 
+# The bot's view snapshot, written while playing
+battleship-bot-view.txt
+battleship-bot-view.txt.tmp
+
 # Editor / OS clutter
 .vscode/
 .idea/

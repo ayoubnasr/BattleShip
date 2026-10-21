@@ -48,4 +48,8 @@ void SetBold();
 
 void ClearScreen();
 
+void SleepMs(int milliseconds);
+
+void EnableColors();
+
 #endif

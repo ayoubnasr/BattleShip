@@ -149,6 +149,9 @@ typedef struct Player{
     int opponentHits;   //How many of those attacks hit
     int recentOpponentHits[RISK_RECENT_TURNS]; //Whether each of the opponent's last attacks hit (1) or not (0), oldest overwritten first
 
+    //What the bot decided on its last turn and why (shown in the bot's view):
+    BotDecision lastDecision;
+
 }Player;
 
 

@@ -6,6 +6,9 @@ int currOpponent;
 
 Player **playersArray;
 
+char *programPath;      //How this program was started (argv[0]), to start it again as the bot's view
+int botViewEnabled = 0; //Whether the bot's view is shown in a second window (PVE only)
+
 //Most complicated function:
 void Quit()
 {
@@ -568,6 +571,44 @@ startturn:
     return;
 }
 
+/**
+ * Asks the player whether to show the bot's thinking in a second window, and opens it.
+ */
+void SetUpBotView(int botIndex, int playerIndex)
+{
+    char *input;
+
+    askBotView:
+
+    alloc_Input("Show the bot's thinking in a second window? (yes or no)", &input);
+
+    CheckForQuit(input);
+
+    int yes = strcmpi(input, "yes") == 0 || strcmpi(input, "y") == 0;
+    int no = strcmpi(input, "no") == 0 || strcmpi(input, "n") == 0;
+
+    free(input);
+
+    if (!yes && !no){
+        Println_Centered(INVALID_INPUT_WARNING, strlen(INVALID_INPUT_WARNING), RED);
+        goto askBotView;
+    }
+
+    botViewEnabled = yes;
+
+    if (!botViewEnabled) return;
+
+    //Start from a fresh snapshot, then open the window that shows it:
+    remove(BOT_VIEW_FILE);
+    WriteBotSnapshot(BOT_VIEW_FILE, playersArray[botIndex], playersArray[playerIndex], 0, 0);
+
+    if (!OpenBotViewWindow(programPath, BOT_VIEW_FILE)){
+        //The player opens it by hand (the command was printed), give them time to do it:
+        alloc_Input(REQUEST_ANYKEY, &input);
+        free(input);
+    }
+}
+
 // Phase 2
 void RunGame_PVE()
 {
@@ -581,6 +622,8 @@ void RunGame_PVE()
         //Set Bot:
         SetUpBot(1);
 
+        SetUpBotView(1, 0);
+
         RefreshScreen();
 
 
@@ -588,9 +631,16 @@ void RunGame_PVE()
 
     currPlayer = PickRandomPlayer(PlayerCount);
 
+    int turnCount = 0;
+
 startturn:
 
     int turn = PlayTurn();
+    turnCount++;
+
+    if (botViewEnabled){
+        WriteBotSnapshot(BOT_VIEW_FILE, playersArray[1], playersArray[0], turnCount, turn <= 0);
+    }
 
     if (turn > 0)
     {
@@ -645,8 +695,18 @@ void Welcome()
     
 }
 
-int main()
+int main(int argc, char *argv[])
 {
+    EnableColors();
+
+    //Started as the bot's view window (see BotView.c):
+    if (argc >= 2 && strcmp(argv[1], BOT_VIEW_ARG) == 0)
+    {
+        return RunBotViewer((argc >= 3) ? argv[2] : BOT_VIEW_FILE);
+    }
+
+    programPath = argv[0];
+
     srand(time(NULL)); //Seed the random generator once for the whole game
 
     ClearScreen();

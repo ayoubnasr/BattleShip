@@ -68,6 +68,17 @@ int getConsoleWidth() {
     return columns;
 }
 
+/**
+ * Pauses the program for the given number of milliseconds.
+ */
+void SleepMs(int milliseconds){
+#ifdef _WIN32
+    Sleep(milliseconds);
+#else
+    usleep(milliseconds * 1000);
+#endif
+}
+
 void Indent(int indentation){
     if (indentation < 0) indentation = 0; //Text wider than the console would give a negative width
     printf("%*s", indentation, "");
@@ -86,6 +97,24 @@ void Println_Centered(char* text, int textLen, char* color){
 
     Indent((getConsoleWidth() - textLen) / 2);
     PrintlnClr(text, color);
+}
+
+/**
+ * Makes sure the console understands the ANSI color codes the game prints. Windows consoles only do once "virtual terminal processing" is
+ * switched on (Windows Terminal has it on already, the classic console window doesn't). Other systems always do.
+ */
+void EnableColors(){
+#ifdef _WIN32
+    #ifndef ENABLE_VIRTUAL_TERMINAL_PROCESSING
+        #define ENABLE_VIRTUAL_TERMINAL_PROCESSING 0x0004
+    #endif
+    HANDLE console = GetStdHandle(STD_OUTPUT_HANDLE);
+    DWORD mode = 0;
+
+    if (GetConsoleMode(console, &mode)){
+        SetConsoleMode(console, mode | ENABLE_VIRTUAL_TERMINAL_PROCESSING);
+    }
+#endif
 }
 
 void SetBold(){
