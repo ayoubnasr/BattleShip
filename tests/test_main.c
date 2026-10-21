@@ -41,6 +41,10 @@ void test_artillery(void);
 void test_torpedo(void);
 void test_count_sunk_ships(void);
 
+//test_bot.c
+void test_bot_task_stack_order(void);
+void test_bot_task_creation(void);
+
 int main(void){
     srand((unsigned)time(NULL));
 
@@ -75,6 +79,10 @@ int main(void){
     RUN_TEST(test_artillery);
     RUN_TEST(test_torpedo);
     RUN_TEST(test_count_sunk_ships);
+
+    printf("\n-- Bot --\n");
+    RUN_TEST(test_bot_task_stack_order);
+    RUN_TEST(test_bot_task_creation);
 
     printf("\n%d tests, %d failed\n", tests_run, tests_failed);
     return tests_failed == 0 ? EXIT_SUCCESS : EXIT_FAILURE;

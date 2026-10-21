@@ -178,10 +178,11 @@ void BotSmartAttack(Player * bot, Player * opponent){
         //printf("get funcptr: %p\n", topTask->function);
         int res = PerformTask(topTask);
 
-        //if res = 0 then the task was either invalid or 
+        freeTask(topTask); //The task is done (or impossible), either way it's off the stack now
+
+        //if res <= 0 then the task was either invalid or could not be performed (eg. the cell was already shot), so move on to the next one
 
         if (res <= 0){
-            freeTask(topTask);
             goto doTask;
         }
 
@@ -504,16 +505,23 @@ BotTask * CreateTask(int (*function)(void**), void** arguments, int argumentCoun
     task->flags = flags;
     task->flagCount = flagCount;
 
-
+    return task;
 }
 
+/**
+ * Frees a task together with its arguments and flags. The task owns every argument and flag it holds (each one is its own allocation),
+ * so that this function can free them all the same way.
+ */
 int freeTask(BotTask * task){
+
+    if (task == NULL) return 0;
 
     if (task->arguments != NULL){
         for (int i = 0; i < task->argumentCount; i++)
         {
             free(task->arguments[i]);
         }
+        free(task->arguments);
     }
 
     if (task->flags != NULL){
@@ -521,11 +529,12 @@ int freeTask(BotTask * task){
         {
             free(task->flags[i]);
         }
-        
+        free(task->flags);
     }
 
-    free(task);    
+    free(task);
 
+    return 1;
 }
 
 int AssignNewTask(int priorityFlag,  Player * bot, int (*function)(void**), void** arguments, int argumentCount, void** flags, int flagCount){
@@ -581,32 +590,65 @@ int PerformTask(BotTask * task){
 
     if (task->function == NULL) return 0;
 
-    printf("func ptr in perfTask: %p\n", task->function);
     return task->function(task->arguments);
 
 }
 
 #pragma region [Bot Firing Systems]
+
 /**
- * Input:
- *      - int row: the row number of the targeted cell
- *      - int col: the column number of the targeted cell
- *      - Player * bot
- *      - Player * opponent
+ * This function pushes a task onto the bot's stack memory to fire at the cell (row, col) on a later turn.
+ *
+ * Every argument gets its own allocation, including the two player pointers (stored in a Player** box), so that the task owns all of
+ * its arguments and freeTask() can free them the same way without ever freeing the players themselves.
+ */
+static void AssignFireTask(int priorityFlag, Player * bot, Player * opponent, int row, int col){
+
+    int argCount = 4;
+    void ** args = (void**)(malloc(sizeof(void*) * argCount));
+
+    int* rowPtr = (int*)(malloc(sizeof(int)));
+    *rowPtr = row;
+    int* colPtr = (int*)(malloc(sizeof(int)));
+    *colPtr = col;
+    Player** botPtr = (Player**)(malloc(sizeof(Player*)));
+    *botPtr = bot;
+    Player** opponentPtr = (Player**)(malloc(sizeof(Player*)));
+    *opponentPtr = opponent;
+
+    //Setting the arguments:
+    args[0] = rowPtr;
+    args[1] = colPtr;
+    args[2] = botPtr;
+    args[3] = opponentPtr;
+
+    AssignNewTask(priorityFlag, bot, BotFire, args, argCount, NULL, 0);
+}
+
+/**
+ * Task function: fires at a cell. The arguments are the ones packed by AssignFireTask():
+ *      - args[0]: int * row of the targeted cell
+ *      - args[1]: int * column of the targeted cell
+ *      - args[2]: Player ** bot
+ *      - args[3]: Player ** opponent
+ *
+ * Returns 1 if the bot fired, and 0 if the task is no longer valid (the cell was already shot since the task was assigned, which happens
+ * when two hits next to each other both queue the cell between them).
  */
 int BotFire(void** args){
     
-    printf("YOUY!\n");
     if (args == NULL) return 0;
 
     int row = *(int*)args[0];
     int col = *(int*)args[1];
 
-    Player * bot = (Player*)args[2];
+    Player * bot = *(Player**)args[2];
 
-    Player * opponent = (Player*)args[3];
+    Player * opponent = *(Player**)args[3];
 
-    BotFireHelper(row, col, bot, opponent);
+    if (opponent->grid[row][col] == HIT || opponent->grid[row][col] == MISS) return 0;
+
+    return BotFireHelper(row, col, bot, opponent) > 0;
 
 }
 
@@ -615,23 +657,17 @@ int BotFireHelper(int row, int col, Player * bot, Player * opponent){
     char * coords = alloc_GetCoordsFromIndices(row, col, GRIDSIZE, startingCoordinate_1, startingCoordinate_2,
      endingCoordinate_1, endingCoordinate_2, coord_1_shift, coord_2_shift);
 
-    startfire:
-
-    //Make sure the bot doesn't shoot a previously shot cell
-
-    printf("Fire Coords: %s\n", coords);
-
-    printf("8,8 is: %s\n", alloc_GetCoordsFromIndices(8, 8, GRIDSIZE, startingCoordinate_1, startingCoordinate_2,
-     endingCoordinate_1, endingCoordinate_2, coord_1_shift, coord_2_shift));
-
+    //The bot always fires in easy mode (difficulty 0) so that its misses are written on the grid: that's how the bot remembers them.
+    //On hard mode they stay hidden from the player because DisplayOpponentGrid() only shows misses on easy mode.
     char * error = NULL;
-    int fireRes = Fire(coords, opponent->grid, DifficultyValue, &error);
+    int fireRes = Fire(coords, opponent->grid, 0, &error);
 
+    free(coords);
+    if (error != NULL) free(error);
 
     if (fireRes < 0){
-        if (error != NULL) free(error);
-
-        goto startfire;
+        //The cell was already hit: nothing was fired. The caller must pick another target.
+        return fireRes;
     }
 
 
@@ -641,122 +677,22 @@ int BotFireHelper(int row, int col, Player * bot, Player * opponent){
     //Updating the probability distribution:
     UpdateSurroundingProbabilities(opponent, target);
 
-
-    printf("BEF UPDHEAPWITHINBND\n");
-    
-    DisplayIntGrid(opponent->probabilityGrid, GRIDSIZE);
-
     //Update the probability heaps for all the probability regions that surround the target.
-    UpdateHeapsWithinBounds(opponent, MAX(0, row - LONGEST_SHIPLENGTH), MIN(GRIDSIZE, row + LONGEST_SHIPLENGTH),
-     MAX(0, col - LONGEST_SHIPLENGTH), MIN(GRIDSIZE, col + LONGEST_SHIPLENGTH));
+    UpdateHeapsWithinBounds(opponent, MAX(0, row - LONGEST_SHIPLENGTH), MIN(GRIDSIZE - 1, row + LONGEST_SHIPLENGTH),
+     MAX(0, col - LONGEST_SHIPLENGTH), MIN(GRIDSIZE - 1, col + LONGEST_SHIPLENGTH));
 
-    
-    DisplayIntGrid(opponent->probabilityGrid, GRIDSIZE);
-
-    //Need to check if the target was a HIT or a MISS. If it's a HIT then we assign 4 new tasks to target the surrounding cells:
+    //Need to check if the target was a HIT or a MISS. If it's a HIT then we assign new tasks to target the surrounding cells:
     if(opponent->grid[row][col] == HIT){
-        if (IndexWithinRange(row + 1)){
-            if (opponent->grid[row+1][col] != HIT && opponent->grid[row+1][col] != MISS){
 
-                int argCount = 4;
-                void ** args = (void**)(malloc(sizeof(void*) * argCount));
+        int neighbours[4][2] = {{row + 1, col}, {row - 1, col}, {row, col + 1}, {row, col - 1}};
 
-                for (int i = 0; i < argCount; i++)
-                {
-                    args[i] = (void*)(malloc(sizeof(void*)));
-                }
-                
-                int* rowPtr = (int*)(malloc(sizeof(int)));
-                *rowPtr = row + 1;
-                int* colPtr = (int*)(malloc(sizeof(int)));
-                *colPtr = col;
+        for (int n = 0; n < 4; n++)
+        {
+            int r = neighbours[n][0];
+            int c = neighbours[n][1];
 
-                //Setting the arguments:
-                args[0] = rowPtr;
-                args[1] = colPtr;
-                args[2] = bot;
-                args[3] = opponent;
-                
-
-                AssignNewTask(TASKFLAG_HIGHPRIORITY, bot, BotFire, args, argCount, NULL, 0);
-            }
-        }
-
-        if (IndexWithinRange(row - 1)){
-            if (opponent->grid[row-1][col] != HIT && opponent->grid[row-1][col] != MISS){
-                int argCount = 4;
-                void ** args = (void**)(malloc(sizeof(void*) * argCount));
-
-                for (int i = 0; i < argCount; i++)
-                {
-                    args[i] = (void*)(malloc(sizeof(void*)));
-                }
-                
-                int* rowPtr = (int*)(malloc(sizeof(int)));
-                *rowPtr = row - 1;
-                int* colPtr = (int*)(malloc(sizeof(int)));
-                *colPtr = col;
-
-                //Setting the arguments:
-                args[0] = rowPtr;
-                args[1] = colPtr;
-                args[2] = bot;
-                args[3] = opponent;
-                
-
-                AssignNewTask(TASKFLAG_HIGHPRIORITY, bot, BotFire, args, argCount, NULL, 0);
-            }
-        }
-
-        if (IndexWithinRange(col + 1)){
-            if (opponent->grid[row][col+1] != HIT && opponent->grid[row][col+1] != MISS){
-                int argCount = 4;
-                void ** args = (void**)(malloc(sizeof(void*) * argCount));
-
-                for (int i = 0; i < argCount; i++)
-                {
-                    args[i] = (void*)(malloc(sizeof(void*)));
-                }
-                
-                int* rowPtr = (int*)(malloc(sizeof(int)));
-                *rowPtr = row;
-                int* colPtr = (int*)(malloc(sizeof(int)));
-                *colPtr = col + 1;
-
-                //Setting the arguments:
-                args[0] = rowPtr;
-                args[1] = colPtr;
-                args[2] = bot;
-                args[3] = opponent;
-                
-
-                AssignNewTask(TASKFLAG_HIGHPRIORITY, bot, BotFire, args, argCount, NULL, 0);
-            }
-        }
-
-        if (IndexWithinRange(col - 1)){
-            if (opponent->grid[row][col-1] != HIT && opponent->grid[row][col-1] != MISS){
-                int argCount = 4;
-                void ** args = (void**)(malloc(sizeof(void*) * argCount));
-
-                for (int i = 0; i < argCount; i++)
-                {
-                    args[i] = (void*)(malloc(sizeof(void*)));
-                }
-                
-                int* rowPtr = (int*)(malloc(sizeof(int)));
-                *rowPtr = row;
-                int* colPtr = (int*)(malloc(sizeof(int)));
-                *colPtr = col - 1;
-
-                //Setting the arguments:
-                args[0] = rowPtr;
-                args[1] = colPtr;
-                args[2] = bot;
-                args[3] = opponent;
-                
-
-                AssignNewTask(TASKFLAG_HIGHPRIORITY, bot, BotFire, args, argCount, NULL, 0);
+            if (IndexWithinRange(r) && IndexWithinRange(c) && opponent->grid[r][c] != HIT && opponent->grid[r][c] != MISS){
+                AssignFireTask(TASKFLAG_HIGHPRIORITY, bot, opponent, r, c);
             }
         }
     }
