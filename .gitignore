@@ -1,0 +1,17 @@
+# Build output
+bin/
+build/
+*.o
+*.obj
+*.exe
+*.out
+
+# Editor / OS clutter
+.vscode/
+.idea/
+*.swp
+.DS_Store
+Thumbs.db
+
+# Office lock files
+~$*
