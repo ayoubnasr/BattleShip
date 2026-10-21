@@ -1,5 +1,11 @@
-#include <Windows.h>
+#ifdef _WIN32
+    #include <windows.h>
+#else
+    #include <sys/ioctl.h>
+    #include <unistd.h>
+#endif
 #include <stdio.h>
+#include <stdlib.h>
 #include "../include/UITools.h"
 
 /**
@@ -44,18 +50,26 @@ void ResetFormat(){
  * A function that returns the width of the console window.
  */
 int getConsoleWidth() {
+    int columns = 80; // default width if the console size is unavailable (eg. output is piped)...
+
+#ifdef _WIN32
     CONSOLE_SCREEN_BUFFER_INFO csbi;
-    int columns;
 
     if (GetConsoleScreenBufferInfo(GetStdHandle(STD_OUTPUT_HANDLE), &csbi)) {
         columns = csbi.srWindow.Right - csbi.srWindow.Left + 1;
-    } else {
-        columns = 80; // returns default width if screen buffer info is unavailable...
     }
+#else
+    struct winsize ws;
+
+    if (ioctl(STDOUT_FILENO, TIOCGWINSZ, &ws) == 0 && ws.ws_col > 0) {
+        columns = ws.ws_col;
+    }
+#endif
     return columns;
 }
 
 void Indent(int indentation){
+    if (indentation < 0) indentation = 0; //Text wider than the console would give a negative width
     printf("%*s", indentation, "");
 }
 

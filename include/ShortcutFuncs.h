@@ -8,6 +8,12 @@
 
 #define SHORTCUTS
 
+//strcmpi() (case-insensitive compare) only exists on Windows, other platforms call it strcasecmp():
+#ifndef _WIN32
+    #include <strings.h>
+    #define strcmpi strcasecmp
+#endif
+
 void Print(char* str);
 
 void Println(char* str);
