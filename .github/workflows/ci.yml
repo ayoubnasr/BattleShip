@@ -1,0 +1,40 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  build-and-test:
+    name: Build and test (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build the game
+        run: make CC=${{ matrix.os == 'macos-latest' && 'clang' || 'gcc' }}
+
+      - name: Run the unit tests
+        run: make test CC=${{ matrix.os == 'macos-latest' && 'clang' || 'gcc' }}
+
+  windows-exe:
+    name: Windows executable
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install the MinGW cross-compiler
+        run: sudo apt-get update && sudo apt-get install -y gcc-mingw-w64-x86-64
+
+      - name: Build battleship.exe
+        run: make CC=x86_64-w64-mingw32-gcc OS=Windows_NT MKDIR_BIN="mkdir -p bin"
+
+      - name: Upload battleship.exe
+        uses: actions/upload-artifact@v4
+        with:
+          name: battleship-windows
+          path: bin/battleship.exe

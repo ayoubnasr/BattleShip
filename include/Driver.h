@@ -43,6 +43,4 @@ int SelectGameMode(char * input);
 
 bool CheckTurn();
 
-Player* alloc_InitializePlayer();
-
 #endif

@@ -58,7 +58,7 @@ readoperation:
 
     char *coords = next(inputPtr);
 
-    int res;
+    int res = -1;
 
     switch (operationIndex)
     {
