@@ -102,6 +102,12 @@ Player* alloc_InitializePlayer(Player** output, char* playerName, int isBot, Bot
 
     //Initializing Risk Factor:
     (*output)->riskFactor = NORMAL_RISK;
+    (*output)->opponentShots = 0;
+    (*output)->opponentHits = 0;
+    for (int i = 0; i < RISK_RECENT_TURNS; i++)
+    {
+        (*output)->recentOpponentHits[i] = 0;
+    }
 
     return *output;
 }
@@ -593,6 +599,22 @@ int countSunkShips(Player* player){
 
     return MAX(0,res);
 
+}
+
+//Number of HIT cells on the player's grid
+int countHitCells(Player* player){
+
+    int hits = 0;
+
+    for (int i = 0; i < GRIDSIZE; i++)
+    {
+        for (int j = 0; j < GRIDSIZE; j++)
+        {
+            if (player->grid[i][j] == HIT) hits++;
+        }
+    }
+
+    return hits;
 }
 
 int checkIfSunk(Player *player, ShipBounds *shipBounds) {

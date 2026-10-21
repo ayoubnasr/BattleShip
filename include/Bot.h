@@ -37,9 +37,16 @@ void PlaceBotShips(Player * bot);
 
 void BotSmartAttack(Player * bot, Player * opponent);
 
+//Average intelligence (checker pattern + hunting queue, see docs/bot-design.docx) is designed but not implemented yet.
 void BotAverageAttack(Player * bot, Player * opponent);
 
 void BotDumbAttack(Player * bot, Player * opponent);
+
+int BotUseSpecialWeapon(Player * bot, Player * opponent);
+
+void RecordOpponentAttack(Player * bot, int hit);
+
+int UpdateRiskFactor(Player * bot, Player * opponent);
 
 int GetRandomProbCoordinateFromCategory(int * row, int * col, D_LinkedList * heapCategory);
 
@@ -74,6 +81,10 @@ int RecalculateAllProbabilities(Player * player);
 void ClearStackMemory(Player * bot);
 
 int CanCellHoldShip(Player * opponent, int row, int col);
+
+int BotPickRandomIndicesWithinBounds(int * outRow, int * outCol, char** grid, int shipSize[2], char* orientation, int startRow, int endRow, int startCol, int endCol);
+
+int BotPickLowestProbabilityPlacement(int * outRow, int * outCol, char * outOrientation, Player * bot, int shipLength);
 
 int PickRandomCell(int * row, int * col, Player * opponent, int onlyCellsThatCanHoldShips);
 

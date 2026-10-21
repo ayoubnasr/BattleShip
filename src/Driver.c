@@ -50,6 +50,7 @@ readoperation:
     if (operationIndex < 0 || strlen(operationStr) == 0)
     {
         if (outputMsg != NULL) *outputMsg = CreateString_alloc(1, INVALID_OPERATION_WARNING);
+        free(operationStr);
         return -1;
     }
 
@@ -195,7 +196,14 @@ void SetUpNewPlayer(int index)
     char *name = next(&inpPtr);
 
     CheckForQuit(name);
-    
+
+    if (strlen(name) == 0){
+        Println_Centered(INVALID_INPUT_WARNING, strlen(INVALID_INPUT_WARNING), RED);
+        free(input);
+        free(name);
+        goto playername;
+    }
+
     for (int i = 0; i < PlayerCount; i++)
     {
         if (playersArray[i] != NULL){
@@ -262,11 +270,12 @@ void SetUpNewPlayer(int index)
 void SetUpBot(int index){
 
     char * input;
-    char * inputPtr;
 
     askBotDifficulty:
 
-    inputPtr = alloc_Input("Please choose the bot difficulty (easy, hard)", &input);
+    alloc_Input("Please choose the bot difficulty (easy, hard)", &input);
+
+    CheckForQuit(input);
 
     int isEasy = strcmpi(input, "easy");
     int isHard = strcmpi(input, "hard");
@@ -282,9 +291,9 @@ void SetUpBot(int index){
 
     if (isHard == 0) botIQ = SMART;
 
-    alloc_InitializePlayer(&(playersArray[index]), "Botteyi", true, botIQ);
+    free(input);
 
-    printf("ali is ali\n");
+    alloc_InitializePlayer(&(playersArray[index]), "Botteyi", true, botIQ);
 
     PlaceBotShips(playersArray[index]);
     RefreshScreen();
@@ -299,8 +308,6 @@ void SetUpBot(int index){
 
 int PickRandomPlayer(int playerCount)
 {
-    srand(time(0));
-
     int r = rand() % playerCount;
 
     return r;
@@ -317,6 +324,52 @@ void ShowTurnStats(){
     PrintlnClr(playersArray[currOpponent % PlayerCount]->name, playersArray[currOpponent % PlayerCount]->UIColor);
 
     Show_2_PlayerStats(playersArray[currPlayer % PlayerCount], playersArray[currOpponent % PlayerCount]);
+}
+
+/**
+ * Tells the player where the bot fired this turn, by comparing the opponent's grid with how it was before the bot's turn.
+ * (On hard mode the misses are not drawn on the grid, so this is the only way to know where the bot missed.)
+ */
+void AnnounceBotShots(Player * bot, char before[GRIDSIZE][GRIDSIZE])
+{
+    Player * opponent = playersArray[currOpponent];
+    int shots = 0, hits = 0, firstRow = 0, firstCol = 0;
+
+    for (int i = 0; i < GRIDSIZE; i++)
+    {
+        for (int j = 0; j < GRIDSIZE; j++)
+        {
+            if (opponent->grid[i][j] == before[i][j]) continue;
+
+            if (shots == 0){
+                firstRow = i;
+                firstCol = j;
+            }
+            shots++;
+            if (opponent->grid[i][j] == HIT) hits++;
+        }
+    }
+
+    if (shots == 0) return;
+
+    char * msg;
+    char * coords = alloc_GetCoordsFromIndices(firstRow, firstCol, GRIDSIZE, startingCoordinate_1, startingCoordinate_2,
+     endingCoordinate_1, endingCoordinate_2, coord_1_shift, coord_2_shift);
+
+    if (shots == 1){
+        msg = CreateString_alloc(4, bot->name, " fired at ", coords, (hits > 0) ? ": Hit!" : ": Miss.");
+    }
+    else {
+        //Artillery or torpedo
+        char count[16];
+        sprintf(count, "%d", hits);
+        msg = CreateString_alloc(5, bot->name, " used a special attack starting at ", coords, ", hits: ", count);
+    }
+
+    Println_Centered(msg, strlen(msg), (hits > 0) ? RED : WHITE);
+
+    free(coords);
+    free(msg);
 }
 
 int PlayTurn()
@@ -341,7 +394,14 @@ int PlayTurn()
 
         char * outputMsg = NULL;
 
+        int hitsBefore = countHitCells(playersArray[currOpponent]);
+
         int operation = PerformOperation(&inpPtr, &outputMsg);
+
+        //A bot keeps track of how well its opponent attacks (fire = 4, artillery = 7, torpedo = 8) to adjust its risk:
+        if (playersArray[currOpponent]->isBot && (operation == 4 || operation == 7 || operation == 8)){
+            RecordOpponentAttack(playersArray[currOpponent], countHitCells(playersArray[currOpponent]) > hitsBefore);
+        }
 
         if (operation < 0)
         {
@@ -362,8 +422,10 @@ int PlayTurn()
         {
             RefreshScreen();
 
-            Print_Centered("", strlen(outputMsg), WHITE);
-            PrintlnClr(outputMsg, WHITE);
+            if (outputMsg != NULL){
+                Print_Centered("", strlen(outputMsg), WHITE);
+                PrintlnClr(outputMsg, WHITE);
+            }
 
             Print_Centered("", strlen(playersArray[currPlayer % PlayerCount]->name) + strlen("'s turn ended."), WHITE);
             PrintClr(playersArray[currPlayer % PlayerCount]->name, playersArray[currPlayer%PlayerCount]->UIColor);
@@ -379,21 +441,38 @@ int PlayTurn()
 
         #pragma region [BOTS TURN]
 
+        Player * bot = playersArray[currPlayer % PlayerCount];
+
+        //Remember the opponent's grid to tell the player what the bot did:
+        char before[GRIDSIZE][GRIDSIZE];
+        for (int i = 0; i < GRIDSIZE; i++)
+        {
+            for (int j = 0; j < GRIDSIZE; j++)
+            {
+                before[i][j] = playersArray[currOpponent]->grid[i][j];
+            }
+        }
+
+        //The bot reassesses the risk from how the opponent has been doing:
+        UpdateRiskFactor(bot, playersArray[currOpponent]);
+
         //Choose Bot attack depending on bot level:
-        switch (playersArray[currPlayer % PlayerCount]->botIQ)
+        switch (bot->botIQ)
         {
         case SMART:
-            BotSmartAttack(playersArray[currPlayer % PlayerCount], playersArray[currOpponent]);
+            BotSmartAttack(bot, playersArray[currOpponent]);
             break;
-        
+
         default:
-            BotSmartAttack(playersArray[currPlayer % PlayerCount], playersArray[currOpponent]);
+            BotDumbAttack(bot, playersArray[currOpponent]);
             break;
         }
 
         RefreshScreen();
         ShowTurnStats();
         DisplayOpponentGrid((playersArray[currOpponent])->grid, GRIDSIZE, showMiss);
+
+        AnnounceBotShots(bot, before);
         //DisplayIntGrid(playersArray[1]->probabilityGrid, GRIDSIZE);
 
         #pragma endregion
@@ -406,7 +485,7 @@ int PlayTurn()
     int oppSunkShips = countSunkShips(playersArray[currOpponent]);
 
     //If a player loses:
-    if (oppSunkShips == 4){
+    if (oppSunkShips == SHIPCOUNT){
 
         char * win = CreateString_alloc(4, playersArray[currPlayer]->name, " sunk all of ", playersArray[currOpponent]->name, "'s ships!");
 
@@ -571,6 +650,8 @@ void Welcome()
 
 int main()
 {
+    srand(time(NULL)); //Seed the random generator once for the whole game
+
     ClearScreen();
     Welcome();
 

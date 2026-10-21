@@ -86,10 +86,16 @@ static int HasOpenHits(Player * player);
 
 void BotSmartAttack(Player * bot, Player * opponent){
 
+    //Bot weapon usage: the torpedo or the artillery is always used when available, on the most effective target.
+    if (BotUseSpecialWeapon(bot, opponent) > 0) return;
+
+    //At low risk the bot takes more risks: sometimes it attacks somewhere else even while it is sinking a ship (its tasks wait on the stack).
+    int explore = bot->riskFactor == LOW_RISK && !is_empty(bot->stackMemory) && rand() % 100 < LOWRISK_EXPLORE_CHANCE;
+
     start:
 
     //First we must check if the stack is empty:
-    if (is_empty(bot->stackMemory)){
+    if (is_empty(bot->stackMemory) || explore){
 
         //printf("stack empty, continuing pattern: \n");
 
@@ -179,6 +185,209 @@ void BotSmartAttack(Player * bot, Player * opponent){
 
     }
 }
+
+
+/**
+ * The dumb bot (easy mode): picks a random cell every turn. It is not too dumb after all: it never shoots a cell twice and it skips cells
+ * that can't hold any of the remaining ships (eg. a cell boxed in by misses). It doesn't chase its hits.
+ */
+void BotDumbAttack(Player * bot, Player * opponent){
+
+    int row, col;
+
+    if (PickRandomCell(&row, &col, opponent, true) < 0){
+        PickRandomCell(&row, &col, opponent, false);
+    }
+
+    char * coords = alloc_GetCoordsFromIndices(row, col, GRIDSIZE, startingCoordinate_1, startingCoordinate_2,
+     endingCoordinate_1, endingCoordinate_2, coord_1_shift, coord_2_shift);
+
+    //Fired in easy mode so that the bot remembers its misses (see BotFireHelper())
+    char * error = NULL;
+    Fire(coords, opponent->grid, 0, &error);
+
+    free(coords);
+    if (error != NULL) free(error);
+
+    countSunkShips(opponent); //Keep the IsSunk flags up to date: CanCellHoldShip() relies on them
+}
+
+
+#pragma region [Bot Weapons]
+
+//Sum of the probabilities of the cells in the area that can still be targeted (cells that were shot count as 0)
+static int SumTargetableProbabilities(Player * opponent, int row0, int row1, int col0, int col1){
+
+    int sum = 0;
+
+    for (int i = MAX(0, row0); i <= MIN(GRIDSIZE - 1, row1); i++)
+    {
+        for (int j = MAX(0, col0); j <= MIN(GRIDSIZE - 1, col1); j++)
+        {
+            if (opponent->grid[i][j] != HIT && opponent->grid[i][j] != MISS && opponent->probabilityGrid[i][j] > 0){
+                sum += opponent->probabilityGrid[i][j];
+            }
+        }
+    }
+
+    return sum;
+}
+
+/**
+ * Bot weapon usage (bot design doc):
+ *      - Torpedo: targets the row or column with the highest probability sum.
+ *      - Artillery: targets the 2x2 area with the highest probability sum.
+ *      - The bot always uses one of them when it is allowed to (the same rules as the player: right after sinking a ship, and the torpedo
+ *        only once three ships are sunk), the torpedo first since it covers more cells.
+ * 
+ * Returns 1 if a weapon was used (that was the bot's turn), 0 otherwise.
+ */
+int BotUseSpecialWeapon(Player * bot, Player * opponent){
+
+    if (bot->prevSunk == 0) return 0;
+
+    char * msg = NULL;
+
+    if (countSunkShips(opponent) >= 3){
+
+        //Find the best row (lineType 0) or column (lineType 1):
+        int bestLine = -1, bestType = 0, bestSum = 0;
+
+        for (int line = 0; line < GRIDSIZE; line++)
+        {
+            int rowSum = SumTargetableProbabilities(opponent, line, line, 0, GRIDSIZE - 1);
+            int colSum = SumTargetableProbabilities(opponent, 0, GRIDSIZE - 1, line, line);
+
+            if (rowSum > bestSum){ bestSum = rowSum; bestLine = line; bestType = 0; }
+            if (colSum > bestSum){ bestSum = colSum; bestLine = line; bestType = 1; }
+        }
+
+        if (bestLine >= 0){
+
+            //The torpedo takes a row number or a column letter, in the numeral systems shown on the grid:
+            char * input = (bestType == 0) ? alloc_IntegerToNumeral(bestLine + coord_2_shift, GRIDSIZE, startingCoordinate_2, endingCoordinate_2)
+                                           : alloc_IntegerToNumeral(bestLine + coord_1_shift, GRIDSIZE, startingCoordinate_1, endingCoordinate_1);
+
+            int res = Torpedo(input, bot, opponent, 0, &msg);
+
+            free(input);
+            if (msg != NULL) free(msg);
+
+            if (res > 0){
+                for (int k = 0; k < GRIDSIZE; k++)
+                {
+                    if (bestType == 0) BotAnalyzeShot(bestLine, k, bot, opponent);
+                    else BotAnalyzeShot(k, bestLine, bot, opponent);
+                }
+                return 1;
+            }
+            msg = NULL;
+        }
+    }
+
+    //Artillery: find the best 2x2 area, by its top-left cell
+    int bestRow = -1, bestCol = -1, bestSum = 0;
+
+    for (int i = 0; i < GRIDSIZE - 1; i++)
+    {
+        for (int j = 0; j < GRIDSIZE - 1; j++)
+        {
+            int sum = SumTargetableProbabilities(opponent, i, i + 1, j, j + 1);
+
+            if (sum > bestSum){ bestSum = sum; bestRow = i; bestCol = j; }
+        }
+    }
+
+    if (bestRow < 0) return 0;
+
+    char * coords = alloc_GetCoordsFromIndices(bestRow, bestCol, GRIDSIZE, startingCoordinate_1, startingCoordinate_2,
+     endingCoordinate_1, endingCoordinate_2, coord_1_shift, coord_2_shift);
+
+    int res = Artillery(coords, bot, opponent, 0, &msg);
+
+    free(coords);
+    if (msg != NULL) free(msg);
+
+    if (res <= 0) return 0;
+
+    for (int i = bestRow; i <= bestRow + 1; i++)
+    {
+        for (int j = bestCol; j <= bestCol + 1; j++)
+        {
+            BotAnalyzeShot(i, j, bot, opponent);
+        }
+    }
+
+    return 1;
+}
+
+#pragma endregion
+
+
+#pragma region [Risk]
+
+/**
+ * Records one attack of the opponent against the bot: whether it hit or not. Called by the driver after every attack (fire, artillery
+ * or torpedo) the bot receives.
+ */
+void RecordOpponentAttack(Player * bot, int hit){
+
+    bot->recentOpponentHits[bot->opponentShots % RISK_RECENT_TURNS] = hit ? 1 : 0;
+
+    bot->opponentShots++;
+    if (hit) bot->opponentHits++;
+}
+
+/**
+ * Recalculates the bot's risk factor from the opponent's accuracy, success rate and sunk ratio (see the RISK_ macros in Player.h).
+ * The bot starts at normal risk and stays there until the opponent attacked RISK_MIN_SHOTS times.
+ */
+int UpdateRiskFactor(Player * bot, Player * opponent){
+
+    if (bot->opponentShots < RISK_MIN_SHOTS){
+        bot->riskFactor = NORMAL_RISK;
+        return bot->riskFactor;
+    }
+
+    //Accuracy = Opponent's hits / Opponent's total shots
+    double accuracy = (double)bot->opponentHits / bot->opponentShots;
+
+    //Success Rate = Opponent's hits in the last t turns / t
+    int recentTurns = MIN(bot->opponentShots, RISK_RECENT_TURNS);
+    int recentHits = 0;
+    for (int i = 0; i < recentTurns; i++)
+    {
+        recentHits += bot->recentOpponentHits[i];
+    }
+    double successRate = (double)recentHits / recentTurns;
+
+    //Sunk Ratio = Opponent's sunk ships / Bot's sunk ships  (when the bot sank nothing yet, any ship the opponent sank is past the threshold)
+    int opponentSunk = countSunkShips(bot);
+    int botSunk = countSunkShips(opponent);
+    double sunkRatio = (botSunk == 0) ? ((opponentSunk > 0) ? RISK_SUNK_RATIO_THRESHOLD + 1 : 0) : (double)opponentSunk / botSunk;
+
+    int dangerSigns = (accuracy >= RISK_ACCURACY_THRESHOLD) + (successRate >= RISK_SUCCESS_RATE_THRESHOLD) + (sunkRatio > RISK_SUNK_RATIO_THRESHOLD);
+
+    switch (dangerSigns)
+    {
+    case 0:
+        bot->riskFactor = LOW_RISK;
+        break;
+    case 1:
+        bot->riskFactor = NORMAL_RISK;
+        break;
+    case 2:
+        bot->riskFactor = HIGH_RISK;
+        break;
+    default:
+        bot->riskFactor = EXTREMELYHIGH_RISK;
+        break;
+    }
+
+    return bot->riskFactor;
+}
+
+#pragma endregion
 
 
 #pragma region [Accessing Probability Cells]
@@ -796,100 +1005,153 @@ int PickRandomCell(int * row, int * col, Player * opponent, int onlyCellsThatCan
 
 int BotPickRandomIndicesWithinBounds(int * outRow, int * outCol, char** grid, int shipSize[2], char* orientation, int startRow, int endRow, int startCol, int endCol){
     
-
-    start:
-    int rowMax = endRow, colMax = endCol;
-
-    
+    //Number of rows and columns the ship's first cell can start on so that the whole ship stays within the bounds:
+    int rowCount = endRow - startRow + 1, colCount = endCol - startCol + 1;
 
     if (strcmpi(orientation, "h") == 0){
-        colMax -= shipSize[0];
+        colCount -= shipSize[0] - 1;
     }
     else {
-        rowMax -= shipSize[0];
+        rowCount -= shipSize[0] - 1;
     }
 
-    printf("startRow = %d, rowMax = %d\n", startRow, rowMax);
+    if (rowCount <= 0 || colCount <= 0) return -1; //The ship doesn't fit within the bounds
 
-    int row = startRow + (rand() % rowMax);
-    int col = startCol + (rand() % colMax);
+    start:
 
-    printf("%d,%d\n", row, col);
+    int row = startRow + (rand() % rowCount);
+    int col = startCol + (rand() % colCount);
 
     char * coords = alloc_GetCoordsFromIndices(row, col, GRIDSIZE, startingCoordinate_1, startingCoordinate_2, endingCoordinate_1, endingCoordinate_2, coord_1_shift, coord_2_shift);
 
-    printf("%s\n",coords);
-    printf("%s\n",orientation);
-    
     char * error = NULL;
 
     int * shipBounds = alloc_GridAreaFromInput(coords, orientation, shipSize[0] - 1, shipSize[1], &error);
 
-    if (error != NULL) printf("%s\n", error);
-    
-    printf("huhh\n");
-    printf("%d, %d,%d,%d\n", shipBounds[0], shipBounds[1], shipBounds[2], shipBounds[3]);
+    free(coords);
+    if (error != NULL) free(error);
+
+    if (shipBounds == NULL) goto start;
 
     if (CheckForOverlap(grid, shipBounds)){
-        printf("there was an overlap\n");
-        free(coords);
         free(shipBounds);
-        if (error != NULL) free(error);
         goto start;
     }
 
     *outRow = row;
     *outCol = col;
 
-    free(coords);
     free(shipBounds);
-    if (error != NULL) free(error);
 
     return 1;
 }
 
+/**
+ * Probability-based placement (bot design doc, hard-bot mode): finds the placement of the ship with the lowest chance of being hit,
+ * meaning the lowest sum of the bot's own probability grid over the ship's cells (the same grid the opponent's bot would use to hunt it).
+ * Every free placement in both orientations is considered; ties are broken randomly so the bot doesn't always pick the same corner.
+ * 
+ * Output: the first cell of the ship in outRow/outCol and its orientation ("h" or "v") in outOrientation. Returns -1 if the ship fits nowhere.
+ */
+int BotPickLowestProbabilityPlacement(int * outRow, int * outCol, char * outOrientation, Player * bot, int shipLength){
 
+    int bestSum = -1, ties = 0;
 
+    for (int o = 0; o < 2; o++)
+    {
+        for (int row = 0; row < GRIDSIZE; row++)
+        {
+            for (int col = 0; col < GRIDSIZE; col++)
+            {
+                int endRow = (o == 0) ? row : row + shipLength - 1;
+                int endCol = (o == 0) ? col + shipLength - 1 : col;
+
+                if (!IndexWithinRange(endRow) || !IndexWithinRange(endCol)) continue;
+
+                int bounds[4] = {row, endRow, col, endCol};
+                if (CheckForOverlap(bot->grid, bounds)) continue;
+
+                int sum = 0;
+                for (int i = row; i <= endRow; i++)
+                {
+                    for (int j = col; j <= endCol; j++)
+                    {
+                        sum += bot->probabilityGrid[i][j];
+                    }
+                }
+
+                //Keep the lowest sum. Among equal sums, the k-th one found replaces the pick with probability 1/k, so every tie is equally likely.
+                if (bestSum < 0 || sum < bestSum){
+                    bestSum = sum;
+                    ties = 1;
+                }
+                else if (sum == bestSum){
+                    ties++;
+                    if (rand() % ties != 0) continue;
+                }
+                else continue;
+
+                *outRow = row;
+                *outCol = col;
+                outOrientation[0] = (o == 0) ? 'h' : 'v';
+                outOrientation[1] = '\0';
+            }
+        }
+    }
+
+    return (bestSum < 0) ? -1 : 1;
+}
+
+/**
+ * Places the bot's fleet:
+ *      - Easy bot: every ship is placed randomly.
+ *      - Hard (smart) bot: a random number of ships, at least one, are placed where they are least likely to be hit (see
+ *        BotPickLowestProbabilityPlacement()), the remaining ships are placed randomly.
+ */
 void PlaceBotShips(Player *bot) {
 
-    srand(time(0));
-
     char shipTypes[] = {SUBMARINE_C, DESTROYER_C, BATTLESHIP_C, CARRIER_C};
-    int ShipSizes[SHIPCOUNT][2] = {{2,0}, {3,0}, {4,0}, {5,0}};
+    int ShipSizes[SHIPCOUNT][2] = {{SUBMARINE_LENGTH,0}, {DESTROYER_LENGTH,0}, {BATTLESHIP_LENGTH,0}, {CARRIER_LENGTH,0}};
 
-    for (int i = 0; i < SHIPCOUNT; i++) {
+    //Decide which ships use the probability placement: shuffle the ship order, the first probabilityShips ones do.
+    int order[SHIPCOUNT];
+    for (int i = 0; i < SHIPCOUNT; i++) order[i] = i;
+    for (int i = SHIPCOUNT - 1; i > 0; i--)
+    {
+        int k = rand() % (i + 1);
+        int temp = order[i];
+        order[i] = order[k];
+        order[k] = temp;
+    }
+
+    int probabilityShips = (bot->botIQ == SMART) ? 1 + rand() % SHIPCOUNT : 0;
+
+    for (int n = 0; n < SHIPCOUNT; n++) {
+        int i = order[n];
+
         char orientation[2];
-        int horizontal = rand() % 2;
-
-        // Set orientation to 'H' for horizontal or 'V' for vertical
-        orientation[0] = horizontal ? 'h' : 'v';
-        orientation[1] = '\0';
-
         int row;
         int col;
 
-        BotPickRandomIndicesWithinBounds(&row, &col, bot->grid, ShipSizes[i], orientation, 0, GRIDSIZE - 1, 0, GRIDSIZE - 1);
+        if (n >= probabilityShips || BotPickLowestProbabilityPlacement(&row, &col, orientation, bot, ShipSizes[i][0]) < 0){
+            int horizontal = rand() % 2;
 
-        printf("%d,%d\n", row, col);
+            // Set orientation to 'H' for horizontal or 'V' for vertical
+            orientation[0] = horizontal ? 'h' : 'v';
+            orientation[1] = '\0';
+
+            BotPickRandomIndicesWithinBounds(&row, &col, bot->grid, ShipSizes[i], orientation, 0, GRIDSIZE - 1, 0, GRIDSIZE - 1);
+        }
+
         // Convert to user coordinates
         char * coords = alloc_GetCoordsFromIndices(row, col, GRIDSIZE, startingCoordinate_1, startingCoordinate_2, endingCoordinate_1, endingCoordinate_2, coord_1_shift, coord_2_shift);
         
-        //printf("%d, %d\n", ShipSizes[i][0], ShipSizes[i][1]);
-        //printf("%s\n", coords);
-        // Try to place the ship
+        // Place the ship (the position was checked to be free and inside the grid)
         char * error = NULL;
         PlaceShipOnGridHelper(bot, shipTypes[i], bot->grid, coords, orientation, ShipSizes[i], &error);
 
-        printf("%s\n", error);
-
-        printf("%c\n", coords[0]);
-        
         free (coords);
         if(error != NULL) free(error);
-        
-        //char c;
-
-        //scanf("%c", &c);
     }
 }
 

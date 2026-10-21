@@ -56,6 +56,23 @@ typedef struct ShipBounds {
 #define NORMAL_RISK 1
 #define LOW_RISK 0
 
+/**
+ * Risk control (presentation, 2.3). The bot measures how dangerous its opponent is with three numbers:
+ *      - Accuracy     = opponent's hits / opponent's total shots
+ *      - Success rate = opponent's hits in the last RISK_RECENT_TURNS turns / RISK_RECENT_TURNS
+ *      - Sunk ratio   = opponent's sunk ships (the bot's ships it sank) / bot's sunk ships (the opponent's ships the bot sank)
+ * Each number past its threshold below counts as one sign of danger: 0 signs is LOW_RISK, 1 is NORMAL_RISK, 2 is HIGH_RISK and 3 is
+ * EXTREMELYHIGH_RISK. Changing these values changes how strongly the bot reacts to the opponent's success.
+ */
+#define RISK_RECENT_TURNS 5
+#define RISK_MIN_SHOTS 3                //The bot stays at NORMAL_RISK until the opponent has attacked this many times
+#define RISK_ACCURACY_THRESHOLD 0.30
+#define RISK_SUCCESS_RATE_THRESHOLD 0.40
+#define RISK_SUNK_RATIO_THRESHOLD 1.0
+
+//At LOW_RISK the bot takes more risks: this is the chance (in %) that it attacks somewhere else while it is sinking a ship
+#define LOWRISK_EXPLORE_CHANCE 25
+
 
 typedef struct Player{
 
@@ -128,6 +145,10 @@ typedef struct Player{
     //Risk Variables:
     int riskFactor;
 
+    int opponentShots;  //Number of attacks the opponent made against this player
+    int opponentHits;   //How many of those attacks hit
+    int recentOpponentHits[RISK_RECENT_TURNS]; //Whether each of the opponent's last attacks hit (1) or not (0), oldest overwritten first
+
 }Player;
 
 
@@ -164,6 +185,8 @@ void DisplayOpponentGrid(char ** grid, int gridSize, int showMiss);
 
 
 int countSunkShips(Player* player);
+
+int countHitCells(Player* player);
 
 int checkIfSunk(Player *player, ShipBounds* shipBounds);
 

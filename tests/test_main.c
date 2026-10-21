@@ -46,6 +46,14 @@ void test_bot_task_stack_order(void);
 void test_bot_task_creation(void);
 void test_smart_bot_wins_at_every_risk_level(void);
 void test_smart_bot_fleet_in_corner(void);
+void test_dumb_bot_wins_and_never_repeats(void);
+void test_dumb_bot_skips_cells_that_cannot_hold_ships(void);
+void test_bot_ship_placement(void);
+void test_lowest_probability_placement(void);
+void test_smart_bot_uses_artillery_after_sinking(void);
+void test_smart_bot_uses_torpedo_after_third_ship(void);
+void test_smart_bot_full_games_with_weapons(void);
+void test_risk_factor(void);
 
 //test_probabilities.c
 void test_initial_probability_grid(void);
@@ -107,6 +115,14 @@ int main(void){
     RUN_TEST(test_bot_task_creation);
     RUN_TEST(test_smart_bot_wins_at_every_risk_level);
     RUN_TEST(test_smart_bot_fleet_in_corner);
+    RUN_TEST(test_dumb_bot_wins_and_never_repeats);
+    RUN_TEST(test_dumb_bot_skips_cells_that_cannot_hold_ships);
+    RUN_TEST(test_bot_ship_placement);
+    RUN_TEST(test_lowest_probability_placement);
+    RUN_TEST(test_smart_bot_uses_artillery_after_sinking);
+    RUN_TEST(test_smart_bot_uses_torpedo_after_third_ship);
+    RUN_TEST(test_smart_bot_full_games_with_weapons);
+    RUN_TEST(test_risk_factor);
 
     printf("\n%d tests, %d failed\n", tests_run, tests_failed);
     return tests_failed == 0 ? EXIT_SUCCESS : EXIT_FAILURE;
